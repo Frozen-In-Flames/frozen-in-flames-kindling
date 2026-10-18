@@ -1,0 +1,48 @@
+# Frozen In Flames: Kindling, quality targets (Build Manual Part 1.3).
+# Rule: set a numeric threshold for every row before training anything.
+# Publish them. Review them quarterly.
+# Run tools/check_targets.py to report which thresholds are still unset.
+
+version: "1.0"
+status: draft
+
+targets:
+  - dimension: song_quality
+    requirement: Convincing vocals and instruments, coherent arrangement, clean mix, few artifacts
+    measurement: Blinded listening panels; artifact detectors
+    threshold: TBD
+
+  - dimension: instruction_following
+    requirement: Lyrics, genre, mood, tempo, key, instrumentation, and structure are reflected in the result
+    measurement: Rubric scoring plus automatic checks (tempo, key, section timing)
+    threshold: TBD
+
+  - dimension: lyric_fidelity
+    requirement: Every line present, in order, intelligible, aligned
+    measurement: ASR word error rate on isolated vocals; alignment error
+    threshold: TBD
+
+  - dimension: consistency
+    requirement: Same singer, palette, groove, and motifs across sections
+    measurement: Timbre similarity across sections; motif recurrence checks
+    threshold: TBD
+
+  - dimension: edit_locality
+    requirement: Edits change the requested region or element and little else
+    measurement: Audio difference outside the edit mask (Part 12)
+    threshold: TBD
+
+  - dimension: reproducibility
+    requirement: Same scene, assets, seeds, and settings give the same render
+    measurement: Bit-level or perceptual-equivalence test
+    threshold: TBD
+
+  - dimension: latency
+    requirement: Fast draft previews; bounded full-render time
+    measurement: Wall-clock on reference hardware
+    threshold: TBD
+
+  - dimension: accessibility
+    requirement: Draft tier runs on a single consumer GPU
+    measurement: Benchmarks on the declared hardware tiers
+    threshold: TBD

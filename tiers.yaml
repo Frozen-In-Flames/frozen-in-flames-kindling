@@ -1,0 +1,18 @@
+# Frozen In Flames: Kindling, hardware tiers (Build Manual Part 1.4).
+# Every feature must state which tiers it supports.
+
+version: "1.0"
+
+tiers:
+  draft:
+    name: Draft
+    hardware: single consumer GPU
+    purpose: fast previews, smaller models
+  studio:
+    name: Studio
+    hardware: workstation GPU
+    purpose: full-quality local rendering
+  hosted:
+    name: Hosted
+    hardware: largest models
+    purpose: batch and long renders
