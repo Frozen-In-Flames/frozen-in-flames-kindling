@@ -7,5 +7,5 @@ and the Artist Profile. The core loop is analyze, construct scene, render,
 inspect, revise.
 """
 
-__version__ = "12.0.0"
-__kindling_version__ = 12
+__version__ = "13.0.0"
+__kindling_version__ = 13
