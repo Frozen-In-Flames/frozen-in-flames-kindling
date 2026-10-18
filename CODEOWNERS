@@ -1,0 +1,95 @@
+# Ownership (Part 20, rule of ownership)
+
+Every Part of the build manual has one named owner accountable for its
+acceptance tests. This file maps repository paths to the role that owns
+them. All roles are currently held by Frozen In Flames (Aries Hilton);
+as the team grows, reassign lines to the named owner.
+
+# Part 1: Product definition
+/targets.yaml @frozen-in-flames
+/docs/product-definition.md @frozen-in-flames
+
+# Part 2: Architecture
+/kindling/architecture.py @frozen-in-flames
+/kindling/interfaces.py @frozen-in-flames
+
+# Part 3: The Musical Scene
+/kindling/scene/ @frozen-in-flames
+
+# Part 4: Data pipeline
+/kindling/data/ @frozen-in-flames
+/docs/data-policy.md @frozen-in-flames
+
+# Part 5: Audio representation
+/kindling/codec/ @frozen-in-flames
+/docs/listening-protocol.md @frozen-in-flames
+
+# Part 6: Song planning and rendering
+/kindling/planning/ @frozen-in-flames
+
+# Part 7: Vocals and lyrics
+/kindling/vocals/ @frozen-in-flames
+
+# Part 8: Voice characters
+/kindling/assets/voice.py @frozen-in-flames
+/docs/voice-characters.md @frozen-in-flames
+
+# Part 9: Virtual instruments
+/kindling/instruments/ @frozen-in-flames
+/docs/virtual-instruments.md @frozen-in-flames
+
+# Part 10: Audio-to-preset inverse rendering
+/kindling/presets/ @frozen-in-flames
+/docs/inverse-rendering.md @frozen-in-flames
+
+# Part 11: Artist profile
+/kindling/profile/ @frozen-in-flames
+/docs/artist-profile.md @frozen-in-flames
+
+# Part 12: Editing engine
+/kindling/editing/ @frozen-in-flames
+/docs/editing-engine.md @frozen-in-flames
+
+# Part 13: Mix, mastering, export
+/kindling/mix/ @frozen-in-flames
+/docs/mix-master-export.md @frozen-in-flames
+
+# Part 14: Interface, API, DAW
+/kindling/api/ @frozen-in-flames
+/docs/interface-api-daw.md @frozen-in-flames
+
+# Part 15: Project state and reproducibility
+/kindling/project/ @frozen-in-flames
+/docs/project-reproducibility.md @frozen-in-flames
+
+# Part 16: Training program
+/kindling/training/ @frozen-in-flames
+/docs/training-program.md @frozen-in-flames
+
+# Part 17: Evaluation program
+/kindling/eval/ @frozen-in-flames
+/docs/evaluation-program.md @frozen-in-flames
+
+# Part 18: Deployment and operations
+/kindling/ops/ @frozen-in-flames
+/docs/deployment-operations.md @frozen-in-flames
+
+# Part 19: Consent, provenance, privacy, safety
+/kindling/safety/ @frozen-in-flames
+/docs/safety.md @frozen-in-flames
+
+# Part 20: Team and resources
+/CODEOWNERS @frozen-in-flames
+/docs/team.md @frozen-in-flames
+
+# Part 21: Risks and mitigations
+/docs/risks.md @frozen-in-flames
+
+# Part 22: Build sequence
+/docs/build-sequence.md @frozen-in-flames
+
+# Part 23: Release checklist
+/docs/release-checklist.md @frozen-in-flames
+
+# The manual itself is never edited
+/docs/BUILD_MANUAL.md @frozen-in-flames
