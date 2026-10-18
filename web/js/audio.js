@@ -125,3 +125,30 @@ export function downloadBlob(blob, filename) {
     a.remove();
   }, 4000);
 }
+
+// Cross-platform save. The download attribute is ignored on iPhone Safari
+// and awkward on some Android builds, so prefer the Web Share API with files
+// when available: it opens the native share sheet (Save to Files on iOS,
+// share targets on Android). Falls back to anchor download on desktop.
+export async function shareOrDownloadBlob(blob, filename, extraFiles) {
+  const files = [new File([blob], filename, { type: blob.type })];
+  if (extraFiles) {
+    for (const { blob: b, filename: fn } of extraFiles) {
+      files.push(new File([b], fn, { type: b.type }));
+    }
+  }
+  if (navigator.canShare && navigator.canShare({ files })) {
+    try {
+      await navigator.share({ files, title: "Frozen In Flames: Kindling" });
+      return "shared";
+    } catch (e) {
+      if (e && e.name === "AbortError") return "cancelled";
+    }
+  }
+  downloadBlob(blob, filename);
+  if (extraFiles) {
+    extraFiles.forEach(({ blob: b, filename: fn }, i) =>
+      setTimeout(() => downloadBlob(b, fn), 700 * (i + 1)));
+  }
+  return "downloaded";
+}
