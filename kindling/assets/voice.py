@@ -216,10 +216,40 @@ def _vowel_template(vowel: str, rate: int) -> np.ndarray:
 
 
 def analyze_reference(samples: List[float], rate: int,
-                      languages: Optional[List[str]] = None) -> Dict[str, Any]:
+                      languages: Optional[List[str]] = None,
+                      separate_vocals: bool = False,
+                      stereo: Optional[np.ndarray] = None) -> Dict[str, Any]:
     """Deterministic reference analysis: pitch range, dynamics, registers,
-    vowel coverage. Returns the reference summary for the asset (8.1, 8.3)."""
-    arr = np.asarray(samples, dtype=float)
+    vowel coverage. Returns the reference summary for the asset (8.1, 8.3).
+
+    separate_vocals=False (default) analyzes the mono mixdown exactly as
+    before; existing behavior and existing characters are unchanged. With
+    separate_vocals=True, stereo=... (shape (2, N)) is required: the vocal
+    is first isolated with kindling.assets.separate (center-channel plus
+    repeating-background cues, classical DSP, no learned models), mixed to
+    mono, conditioned with a 120 Hz highpass against residual kick/bass
+    rumble, and then analyzed. The summary records the separation under
+    "separation" so provenance always shows how the reference was made.
+    """
+    separation: Optional[Dict[str, Any]] = None
+    if separate_vocals:
+        if stereo is None:
+            raise ValueError(
+                "separate_vocals=True needs stereo=... (2-channel audio); "
+                "the separator needs the stereo field to work")
+        from kindling.assets.separate import (
+            highpass as _highpass, separate_vocals as _run_separation)
+        vocal, _accompaniment = _run_separation(np.asarray(stereo), rate)
+        mono_vocal = vocal.mean(axis=0) if vocal.ndim == 2 else vocal
+        arr = _highpass(np.asarray(mono_vocal, dtype=float), rate, 120.0)
+        separation = {
+            "applied": True,
+            "method": "kindling.assets.separate.separate_vocals",
+            "cues": ["center-channel", "repeating-background"],
+            "vocal_highpass_hz": 120.0,
+        }
+    else:
+        arr = np.asarray(samples, dtype=float)
     duration_s = len(arr) / rate
     voiced, hop_s = _voiced_frames(arr, rate)
 
@@ -271,7 +301,7 @@ def analyze_reference(samples: List[float], rate: int,
         round(float(len(vowel_clusters)), 2),
         round(duration_s, 2),
     ]
-    return {
+    result = {
         "duration_s": round(duration_s, 2),
         "voiced_s": round(len(voiced) * hop_s, 2),
         "pitch_low_midi": pitch_low,
@@ -286,6 +316,9 @@ def analyze_reference(samples: List[float], rate: int,
         "identity_vector": identity_vector,
         "method": "reference-deterministic",
     }
+    if separation is not None:
+        result["separation"] = separation
+    return result
 
 
 def identity_similarity(a: List[float], b: List[float]) -> float:

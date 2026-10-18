@@ -12,11 +12,14 @@ from kindling.assets.voice import (
     create_voice_character,
     sufficiency_report,
 )
+from kindling.assets.separate import highpass, separate_vocals
 
 __all__ = [
     "VOICE_SCHEMA",
     "VoiceCharacterStore",
     "analyze_reference",
     "create_voice_character",
+    "highpass",
+    "separate_vocals",
     "sufficiency_report",
 ]

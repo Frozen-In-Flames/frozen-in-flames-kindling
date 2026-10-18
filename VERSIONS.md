@@ -28,3 +28,9 @@ Each version implements one part of the build manual (`docs/BUILD_MANUAL.md`), i
 - **V24**: Functional milestone A. Upload / save / use loop: on-disk asset
   library (voice, instrument, preset), render-from-library song builds,
   extended CLI, proven with real audio (228 tests green)
+- **V25**: Vocal separation (classical DSP). `kindling/assets/separate.py`:
+  center-channel plus REPET-style repeating-background cues, numpy/scipy
+  only, no learned models. Opt-in `separate_vocals` flag on
+  `analyze_reference`; honest SDR/SIR eval on synthetic mixtures
+  (vocal +18.7 dB SDR, +23.6 dB SIR). `docs/vocal-separation.md`.
+  voice_aries v1 deliberately unchanged.
