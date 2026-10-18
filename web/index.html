@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Frozen In Flames: Kindling, Open Music Creation System</title>
 <meta name="description" content="Upload your audio, save reusable voice characters, instruments, and presets, then render songs from them. All in the browser.">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 <header class="hero">
@@ -58,31 +58,89 @@
 
   <section id="tab-compose" class="tab">
     <h2>Burn: compose and render</h2>
-    <label class="field">Prompt
-      <input type="text" id="prompt" placeholder="dark driving verse and chorus, 100 bpm" autocomplete="off">
-    </label>
-    <label class="field">Lyrics (one line per line)
-      <textarea id="lyrics" rows="5" placeholder="Type or paste your lyrics here"></textarea>
-    </label>
-    <div class="grid3">
-      <label class="field">Voice
-        <select id="sel-voice"></select>
-      </label>
-      <label class="field">Instrument
-        <select id="sel-inst"></select>
-      </label>
-      <label class="field">Preset
-        <select id="sel-preset"></select>
-      </label>
+
+    <div id="transport" class="transport">
+      <button id="play-btn" class="primary" disabled>Play</button>
+      <button id="tp-stop" disabled>Stop</button>
+      <span id="tp-time" class="dim">0:00 / 0:00</span>
+      <span id="tp-bpm" class="dim"></span>
     </div>
-    <div class="btnrow">
-      <button id="render-btn" class="primary">Render song</button>
+
+    <div id="timeline" class="timeline" style="display:none" aria-label="Arrangement timeline">
+      <div class="tl-grid">
+        <div class="tl-labels">
+          <span class="tl-label tl-voice">Voice</span>
+          <span class="tl-label tl-inst">Instr</span>
+          <span class="tl-label tl-drums">Drums</span>
+        </div>
+        <div class="tl-lanes">
+          <div class="tl-playhead" id="tl-playhead" style="left:0%"></div>
+          <div class="tl-lane" id="tl-voice"></div>
+          <div class="tl-lane" id="tl-inst"></div>
+          <div class="tl-lane" id="tl-drums"></div>
+        </div>
+      </div>
     </div>
+
+    <div id="mixer" class="mixer" style="display:none" aria-label="Mixer">
+      <div class="mx-strip">
+        <span class="mx-name tl-voice">Voice</span>
+        <input type="range" id="mx-voice-vol" min="0" max="1" step="0.01" value="0.8" aria-label="Voice volume">
+        <div class="mx-btns">
+          <button id="mx-voice-mute" aria-label="Mute voice">M</button>
+          <button id="mx-voice-solo" aria-label="Solo voice">S</button>
+        </div>
+      </div>
+      <div class="mx-strip">
+        <span class="mx-name tl-inst">Instr</span>
+        <input type="range" id="mx-instruments-vol" min="0" max="1" step="0.01" value="0.8" aria-label="Instruments volume">
+        <div class="mx-btns">
+          <button id="mx-instruments-mute" aria-label="Mute instruments">M</button>
+          <button id="mx-instruments-solo" aria-label="Solo instruments">S</button>
+        </div>
+      </div>
+      <div class="mx-strip">
+        <span class="mx-name tl-drums">Drums</span>
+        <input type="range" id="mx-drums-vol" min="0" max="1" step="0.01" value="0.8" aria-label="Drums volume">
+        <div class="mx-btns">
+          <button id="mx-drums-mute" aria-label="Mute drums">M</button>
+          <button id="mx-drums-solo" aria-label="Solo drums">S</button>
+        </div>
+      </div>
+      <div class="mx-strip mx-master">
+        <span class="mx-name">Master</span>
+        <input type="range" id="mx-master-vol" min="0" max="1" step="0.01" value="0.9" aria-label="Master volume">
+      </div>
+    </div>
+
+    <details id="session-setup" open>
+      <summary>Session setup</summary>
+      <label class="field">Prompt
+        <input type="text" id="prompt" placeholder="dark driving verse and chorus, 100 bpm" autocomplete="off">
+      </label>
+      <label class="field">Lyrics (one line per line)
+        <textarea id="lyrics" rows="5" placeholder="Type or paste your lyrics here"></textarea>
+      </label>
+      <div class="grid3">
+        <label class="field">Voice
+          <select id="sel-voice"></select>
+        </label>
+        <label class="field">Instrument
+          <select id="sel-inst"></select>
+        </label>
+        <label class="field">Preset
+          <select id="sel-preset"></select>
+        </label>
+      </div>
+      <div class="btnrow">
+        <button id="render-btn" class="primary">Render song</button>
+      </div>
+    </details>
+
     <p id="compose-status" class="status"></p>
     <div id="render-meta" class="dim"></div>
     <div id="player-wrap" style="display:none">
       <div class="btnrow">
-        <button id="play-btn">Play mix</button>
         <button id="dl-mix" disabled>Download mix (WAV)</button>
         <button id="dl-stems" disabled>Download stems (WAV)</button>
       </div>
@@ -101,6 +159,6 @@
   <p><a href="https://github.com/Frozen-In-Flames/frozen-in-flames-kindling">Frozen In Flames: Kindling on GitHub</a> (Apache-2.0)</p>
 </footer>
 
-<script type="module" src="js/app.js?v=5"></script>
+<script type="module" src="js/app.js?v=6"></script>
 </body>
 </html>
