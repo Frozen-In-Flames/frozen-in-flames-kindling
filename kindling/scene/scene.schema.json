@@ -1,0 +1,447 @@
+{
+  "$id": "https://frozen-in-flames.github.io/schemas/kindling-scene-3.0.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Build Manual Part 3: one shared representation connecting intent, symbolic music, performance, and audio.",
+  "properties": {
+    "automation": {
+      "type": "array"
+    },
+    "harmony": {
+      "type": "array"
+    },
+    "id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "kind": {
+      "const": "kindling/scene"
+    },
+    "lyrics": {
+      "type": "object"
+    },
+    "melody": {
+      "type": "object"
+    },
+    "parent": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "parts": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "articulations": {
+            "type": "array"
+          },
+          "dynamics": {
+            "type": "array"
+          },
+          "expression": {
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "instrument": {
+            "additionalProperties": true,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ],
+            "type": "object"
+          },
+          "meta": {
+            "additionalProperties": false,
+            "properties": {
+              "confidence": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              "locked": {
+                "type": "boolean"
+              },
+              "realization": {
+                "enum": [
+                  "intent",
+                  "symbolic",
+                  "performance",
+                  "audio"
+                ]
+              },
+              "source": {
+                "enum": [
+                  "user",
+                  "planner",
+                  "inferred",
+                  "imported"
+                ]
+              }
+            },
+            "required": [
+              "source",
+              "confidence",
+              "locked",
+              "realization"
+            ],
+            "type": "object"
+          },
+          "notes": {
+            "items": {
+              "additionalProperties": true,
+              "properties": {
+                "duration_beats": {
+                  "exclusiveMinimum": 0.0,
+                  "type": "number"
+                },
+                "pitch": {
+                  "maximum": 127,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "start_beats": {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                "velocity": {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "pitch",
+                "start_beats",
+                "duration_beats"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "meta"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "production": {
+      "type": "object"
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "render": {
+      "properties": {
+        "asset_versions": {
+          "type": "object"
+        },
+        "model_versions": {
+          "type": "object"
+        },
+        "sample_rate": {
+          "enum": [
+            44100,
+            48000
+          ],
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "tier": {
+          "enum": [
+            "draft",
+            "studio",
+            "hosted"
+          ]
+        }
+      },
+      "required": [
+        "sample_rate",
+        "seed",
+        "tier"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "sections": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "bars": {
+            "items": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "density": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "description": {
+            "type": "string"
+          },
+          "energy": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lyrics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "meta": {
+            "additionalProperties": false,
+            "properties": {
+              "confidence": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              "locked": {
+                "type": "boolean"
+              },
+              "realization": {
+                "enum": [
+                  "intent",
+                  "symbolic",
+                  "performance",
+                  "audio"
+                ]
+              },
+              "source": {
+                "enum": [
+                  "user",
+                  "planner",
+                  "inferred",
+                  "imported"
+                ]
+              }
+            },
+            "required": [
+              "source",
+              "confidence",
+              "locked",
+              "realization"
+            ],
+            "type": "object"
+          },
+          "type": {
+            "enum": [
+              "intro",
+              "verse",
+              "pre-chorus",
+              "chorus",
+              "bridge",
+              "outro",
+              "custom"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "bars",
+          "meta"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "timeline": {
+      "properties": {
+        "key": {
+          "items": {
+            "properties": {
+              "bar": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "key": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "bar",
+              "key"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "meter": {
+          "items": {
+            "properties": {
+              "bar": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "sig": {
+                "pattern": "^[0-9]+/[0-9]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "bar",
+              "sig"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "tempo": {
+          "items": {
+            "properties": {
+              "bar": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "bpm": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "bar",
+              "bpm"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tempo",
+        "meter",
+        "key"
+      ],
+      "type": "object"
+    },
+    "vocals": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "meta": {
+            "additionalProperties": false,
+            "properties": {
+              "confidence": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              "locked": {
+                "type": "boolean"
+              },
+              "realization": {
+                "enum": [
+                  "intent",
+                  "symbolic",
+                  "performance",
+                  "audio"
+                ]
+              },
+              "source": {
+                "enum": [
+                  "user",
+                  "planner",
+                  "inferred",
+                  "imported"
+                ]
+              }
+            },
+            "required": [
+              "source",
+              "confidence",
+              "locked",
+              "realization"
+            ],
+            "type": "object"
+          },
+          "performance": {
+            "type": "object"
+          },
+          "voice": {
+            "additionalProperties": true,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "meta"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "kind",
+    "schema_version",
+    "timeline",
+    "sections",
+    "parts",
+    "vocals",
+    "render",
+    "provenance"
+  ],
+  "title": "Kindling Musical Scene",
+  "type": "object"
+}
