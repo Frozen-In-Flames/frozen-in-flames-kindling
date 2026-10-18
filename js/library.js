@@ -103,7 +103,24 @@ export async function saveAsset({ kind, name, payload, audioMono, sampleRate, co
 export async function listAssets() {
   const db = await openDb();
   const all = await getAll(db, "assets");
-  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Factory seeds first (the default voice), then newest first.
+  // User assets are never reordered or removed by seeding.
+  return all.sort((a, b) =>
+    ((b.factory ? 1 : 0) - (a.factory ? 1 : 0)) ||
+    b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function hasAsset(id) {
+  const db = await openDb();
+  return (await getOne(db, "assets", id)) !== null;
+}
+
+export async function putRecord(record) {
+  const db = await openDb();
+  await tx(db, ["assets"], "readwrite", t => {
+    t.objectStore("assets").put(record);
+  });
+  return record;
 }
 
 export async function getAsset(id) {

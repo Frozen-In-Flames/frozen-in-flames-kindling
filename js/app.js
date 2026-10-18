@@ -6,7 +6,7 @@ import {
   analyzePitch, analyzeVowelStates, analyzeTempo, analyzeProduction,
   detectOnsets, proposePreset, sufficiencyReport,
 } from "./analysis.js";
-import { saveAsset, listAssets, getAsset, renameAsset, deleteAsset } from "./library.js";
+import { saveAsset, listAssets, getAsset, renameAsset, deleteAsset, hasAsset, putRecord } from "./library.js";
 import { buildScene, layoutSections, assignMelody } from "./compose.js";
 import { renderSong } from "./render.js";
 
@@ -324,7 +324,31 @@ async function downloadLastStems() {
   setStatus($("compose-status"), `Rendered ${Math.round(lastRender.scene.totalSeconds)}s. Seed ${lastRender.seed}.`, "ok");
 }
 
+// The owner's voice ships as the default character for every user, so the
+// demo works even before anyone uploads anything. Users keep and add their
+// own assets alongside it; seeding never touches existing records. Runs once
+// per device; if the user deletes the default it stays deleted.
+const SEED_FLAG = "kindling_seeded_v1";
+async function seedDefaultVoice() {
+  try {
+    if (localStorage.getItem(SEED_FLAG)) return;
+    if (await hasAsset("voice_aries")) {
+      localStorage.setItem(SEED_FLAG, "1");
+      return;
+    }
+    const res = await fetch(new URL("seeds/voice_aries.json", document.baseURI));
+    if (!res.ok) return;
+    const record = await res.json();
+    if (!record || record.id !== "voice_aries") return;
+    await putRecord(record);
+    localStorage.setItem(SEED_FLAG, "1");
+  } catch (e) {
+    // Offline or seed unavailable: the user can still add their own.
+  }
+}
+
 function wire() {
+  seedDefaultVoice();
   for (const t of ["upload", "library", "compose"]) {
     $("nav-" + t).addEventListener("click", () => showTab(t));
   }

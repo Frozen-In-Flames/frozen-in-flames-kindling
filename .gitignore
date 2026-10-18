@@ -4,3 +4,5 @@
 !style.css
 !js/
 !js/**
+!seeds/
+!seeds/**
