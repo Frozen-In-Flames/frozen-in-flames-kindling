@@ -1,14 +1,15 @@
 // Kindling web app: upload -> analyze -> save -> compose -> render -> download.
 // All client-side. AudioContext is resumed on user gesture (iPhone safe).
 
-import { resumeAudio, decodeFile, mixdownMono, audioBufferToWavBlob, shareOrDownloadBlob } from "./audio.js?v=5";
+import { resumeAudio, decodeFile, mixdownMono, audioBufferToWavBlob, shareOrDownloadBlob } from "./audio.js?v=6";
 import {
   analyzePitch, analyzeVowelStates, analyzeTempo, analyzeProduction,
   detectOnsets, proposePreset, sufficiencyReport,
-} from "./analysis.js?v=5";
-import { saveAsset, listAssets, getAsset, renameAsset, deleteAsset, hasAsset, putRecord } from "./library.js?v=5";
-import { buildScene, layoutSections, assignMelody, extractLyricsFromPrompt } from "./compose.js?v=5";
-import { renderSong } from "./render.js?v=5";
+} from "./analysis.js?v=6";
+import { saveAsset, listAssets, getAsset, renameAsset, deleteAsset, hasAsset, putRecord } from "./library.js?v=6";
+import { buildScene, layoutSections, assignMelody, extractLyricsFromPrompt } from "./compose.js?v=6";
+import { renderSong } from "./render.js?v=6";
+import { TRACKS, newMixState, trackGain, fmtTime } from "./mixer.js?v=6";
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -28,7 +29,7 @@ function showTab(name) {
 async function loadChangelog() {
   const list = $("changelog-list");
   try {
-    const res = await fetch(new URL("changelog.json?v=5", document.baseURI));
+    const res = await fetch(new URL("changelog.json?v=6", document.baseURI));
     if (!res.ok) throw new Error("unavailable");
     const data = await res.json();
     const ver = $("app-version");
@@ -271,9 +272,12 @@ async function refreshComposeSelects(preselectId) {
 }
 
 let lastRender = null;
+let mixState = newMixState();
+let daw = null; // active stem playback session: { ctx, sources, gains, master, startT, duration, rafId }
 
 async function renderCompose() {
   const status = $("compose-status");
+  stopPlayback();
   const prompt = $("prompt").value.trim();
   let lyrics = $("lyrics").value.trim();
   let lyricSource = "lyrics";
@@ -314,6 +318,8 @@ async function renderCompose() {
     const result = await renderSong({ scene, melody, assets, seed });
     const ms = Math.round(performance.now() - t0);
     lastRender = { ...result, scene, seed };
+    buildTimeline(scene);
+    $("session-setup").open = false;
     setStatus(status, `Rendered ${Math.round(scene.totalSeconds)}s in ${ms}ms. Seed ${seed}.`, "ok");
     $("player-wrap").style.display = "block";
     $("dl-mix").disabled = false;
@@ -329,13 +335,88 @@ async function renderCompose() {
   }
 }
 
-async function playLast() {
-  if (!lastRender) return;
+// ---- DAW: timeline regions, stem playback through a live mixer ----
+function buildTimeline(scene) {
+  const total = scene.totalSeconds;
+  const lanes = { voice: $("tl-voice"), instruments: $("tl-inst"), drums: $("tl-drums") };
+  for (const lane of Object.values(lanes)) lane.innerHTML = "";
+  scene.sections.forEach((sec, i) => {
+    const left = (sec.startAt / total) * 100;
+    const width = ((sec.bars * scene.secondsPerBar) / total) * 100;
+    for (const lane of Object.values(lanes)) {
+      const r = document.createElement("div");
+      r.className = "tl-region " + (i % 2 ? "ice" : "ember");
+      r.style.left = left + "%";
+      r.style.width = "calc(" + Math.max(0, width).toFixed(3) + "% - 2px)";
+      r.textContent = sec.name;
+      r.title = `${sec.name}: ${sec.bars} bars`;
+      lane.appendChild(r);
+    }
+  });
+  $("tp-bpm").textContent = scene.bpm + " BPM";
+  $("tp-time").textContent = "0:00 / " + fmtTime(total);
+  $("tl-playhead").style.left = "0%";
+  $("timeline").style.display = "block";
+  $("mixer").style.display = "flex";
+  $("play-btn").disabled = false;
+  $("tp-stop").disabled = true;
+}
+
+function liveMix() {
+  if (!daw) return;
+  for (const t of TRACKS) {
+    daw.gains[t].gain.setTargetAtTime(trackGain(mixState, t), daw.ctx.currentTime, 0.02);
+  }
+}
+
+function stopPlayback() {
+  if (daw) {
+    const d = daw;
+    daw = null;
+    cancelAnimationFrame(d.rafId);
+    try { for (const s of d.sources) { try { s.stop(); } catch (e) {} } } catch (e) {}
+    try { d.master.disconnect(); } catch (e) {}
+  }
+  $("play-btn").disabled = !lastRender;
+  $("tp-stop").disabled = true;
+  if (lastRender) {
+    $("tl-playhead").style.left = "0%";
+    $("tp-time").textContent = "0:00 / " + fmtTime(lastRender.scene.totalSeconds);
+  }
+}
+
+async function playStems() {
+  if (!lastRender || daw) return;
   const ctx = await resumeAudio();
-  const src = ctx.createBufferSource();
-  src.buffer = lastRender.mix;
-  src.connect(ctx.destination);
-  src.start();
+  const master = ctx.createGain();
+  master.gain.value = parseFloat($("mx-master-vol").value);
+  master.connect(ctx.destination);
+  const gains = {}, sources = [];
+  for (const t of TRACKS) {
+    const src = ctx.createBufferSource();
+    src.buffer = lastRender.stems[t];
+    const g = ctx.createGain();
+    g.gain.value = trackGain(mixState, t);
+    src.connect(g);
+    g.connect(master);
+    src.start(0);
+    sources.push(src);
+    gains[t] = g;
+  }
+  daw = { ctx, sources, gains, master, startT: ctx.currentTime, duration: lastRender.scene.totalSeconds, rafId: 0 };
+  sources[0].onended = () => { if (daw) stopPlayback(); };
+  $("play-btn").disabled = true;
+  $("tp-stop").disabled = false;
+  tickPlayhead();
+}
+
+function tickPlayhead() {
+  if (!daw) return;
+  const el = daw.ctx.currentTime - daw.startT;
+  const frac = Math.min(1, Math.max(0, el / daw.duration));
+  $("tl-playhead").style.left = (frac * 100).toFixed(2) + "%";
+  $("tp-time").textContent = fmtTime(el) + " / " + fmtTime(daw.duration);
+  if (el < daw.duration) daw.rafId = requestAnimationFrame(tickPlayhead);
 }
 
 async function downloadLastMix() {
@@ -404,7 +485,30 @@ function wire() {
     await resumeAudio().catch(() => {});
     renderCompose();
   });
-  $("play-btn").addEventListener("click", playLast);
+  $("play-btn").addEventListener("click", async () => {
+    await resumeAudio().catch(() => {});
+    playStems();
+  });
+  $("tp-stop").addEventListener("click", () => stopPlayback());
+  for (const t of TRACKS) {
+    $("mx-" + t + "-vol").addEventListener("input", e => {
+      mixState[t].vol = parseFloat(e.target.value);
+      liveMix();
+    });
+    $("mx-" + t + "-mute").addEventListener("click", e => {
+      mixState[t].mute = !mixState[t].mute;
+      e.target.classList.toggle("on", mixState[t].mute);
+      liveMix();
+    });
+    $("mx-" + t + "-solo").addEventListener("click", e => {
+      mixState[t].solo = !mixState[t].solo;
+      e.target.classList.toggle("on", mixState[t].solo);
+      liveMix();
+    });
+  }
+  $("mx-master-vol").addEventListener("input", e => {
+    if (daw) daw.master.gain.setTargetAtTime(parseFloat(e.target.value), daw.ctx.currentTime, 0.02);
+  });
   $("dl-mix").addEventListener("click", downloadLastMix);
   $("dl-stems").addEventListener("click", downloadLastStems);
   showTab("upload");

@@ -4,7 +4,7 @@
 // and a preset proposal with confidence (never the single true chain).
 // Pure functions over Float32Array; no DOM here, so this is unit testable.
 
-import { mixdownMono, freqToMidi } from "./audio.js?v=5";
+import { mixdownMono, freqToMidi } from "./audio.js?v=6";
 
 // ---- FFT (iterative radix-2) ----
 export function fftMag(input) {
