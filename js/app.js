@@ -1,7 +1,7 @@
 // Kindling web app: upload -> analyze -> save -> compose -> render -> download.
 // All client-side. AudioContext is resumed on user gesture (iPhone safe).
 
-import { resumeAudio, decodeFile, mixdownMono, audioBufferToWavBlob, downloadBlob } from "./audio.js";
+import { resumeAudio, decodeFile, mixdownMono, audioBufferToWavBlob, shareOrDownloadBlob } from "./audio.js";
 import {
   analyzePitch, analyzeVowelStates, analyzeTempo, analyzeProduction,
   detectOnsets, proposePreset, sufficiencyReport,
@@ -298,17 +298,30 @@ async function playLast() {
   src.start();
 }
 
-function downloadLastMix() {
+async function downloadLastMix() {
   if (!lastRender) return;
-  downloadBlob(audioBufferToWavBlob(lastRender.mix), `kindling-mix-seed${lastRender.seed}.wav`);
+  setStatus($("compose-status"), "Preparing mix file...", "");
+  await shareOrDownloadBlob(
+    audioBufferToWavBlob(lastRender.mix),
+    `kindling-mix-seed${lastRender.seed}.wav`
+  );
+  setStatus($("compose-status"), `Rendered ${Math.round(lastRender.scene.totalSeconds)}s. Seed ${lastRender.seed}.`, "ok");
 }
 
-function downloadLastStems() {
+async function downloadLastStems() {
   if (!lastRender) return;
   const { stems, seed } = lastRender;
-  downloadBlob(audioBufferToWavBlob(stems.voice), `kindling-stem-voice-seed${seed}.wav`);
-  setTimeout(() => downloadBlob(audioBufferToWavBlob(stems.instruments), `kindling-stem-instruments-seed${seed}.wav`), 600);
-  setTimeout(() => downloadBlob(audioBufferToWavBlob(stems.drums), `kindling-stem-drums-seed${seed}.wav`), 1200);
+  const main = {
+    blob: audioBufferToWavBlob(stems.voice),
+    filename: `kindling-stem-voice-seed${seed}.wav`,
+  };
+  const extras = [
+    { blob: audioBufferToWavBlob(stems.instruments), filename: `kindling-stem-instruments-seed${seed}.wav` },
+    { blob: audioBufferToWavBlob(stems.drums), filename: `kindling-stem-drums-seed${seed}.wav` },
+  ];
+  setStatus($("compose-status"), "Preparing stem files...", "");
+  await shareOrDownloadBlob(main.blob, main.filename, extras);
+  setStatus($("compose-status"), `Rendered ${Math.round(lastRender.scene.totalSeconds)}s. Seed ${lastRender.seed}.`, "ok");
 }
 
 function wire() {
