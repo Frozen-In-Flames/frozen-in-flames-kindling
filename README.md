@@ -47,6 +47,24 @@ One version per part of the build manual. V1 is Part 1, Product definition (this
 
 The full build manual is the spec: [docs/BUILD_MANUAL.md](docs/BUILD_MANUAL.md). Every part has Purpose, Requirements (MUST / SHOULD / MAY), and Acceptance tests. Part 22 gives the build sequence with exit criteria. Part 23 is the release checklist.
 
+### Functional milestone A (V24)
+
+The upload / save / use loop is live in Python. See
+[docs/functional-milestone-a.md](docs/functional-milestone-a.md).
+
+```
+kindling library upload track.wav --kind voice --name "Aries" \
+    --consent-subject "Aries Hilton"
+kindling library list
+kindling render --prompt "dark driving verse and chorus, 100 bpm" \
+    --lyrics-file lyrics.txt --voice voice_aries \
+    --instrument guitar=inst_my_groove --preset preset_my_chain \
+    --seed 7 --out song/
+kindling export song/ --format stems --out song-stems/
+```
+
+Install the command with `pip install -e .` then use `kindling` directly.
+
 ### License
 
 Apache-2.0. See [LICENSE](LICENSE).

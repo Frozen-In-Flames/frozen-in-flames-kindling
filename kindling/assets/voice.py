@@ -473,7 +473,11 @@ def render_with_character(store: "VoiceCharacterStore", voice_id: str,
     support = check_performance_supported(voice, performance)
     if not support["supported"]:
         raise UnsupportedPerformanceError(support["gaps"], support["options"])
-    rendered = vocal_renderer.render_line(voice_id, lyric_line, performance, seed)
+    # Support-check inputs (language, requested range) are not renderer
+    # controls; strip them before the renderer validates its controls.
+    renderer_perf = {k: v for k, v in performance.items()
+                     if k not in ("language", "pitch_low_midi", "pitch_high_midi")}
+    rendered = vocal_renderer.render_line(voice_id, lyric_line, renderer_perf, seed)
     rendered["audio"] = mark_render_provenance(rendered["audio"], voice)
     rendered["metadata"]["voice_id"] = voice_id
     rendered["metadata"]["voice_version"] = voice["version"]

@@ -25,3 +25,6 @@ Each version implements one part of the build manual (`docs/BUILD_MANUAL.md`), i
 - **V21**: Part 21. Risks and mitigations
 - **V22**: Part 22. Build sequence
 - **V23**: Part 23. Release checklist
+- **V24**: Functional milestone A. Upload / save / use loop: on-disk asset
+  library (voice, instrument, preset), render-from-library song builds,
+  extended CLI, proven with real audio (228 tests green)

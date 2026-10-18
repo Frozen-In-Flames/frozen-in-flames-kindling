@@ -1,6 +1,6 @@
 [project]
 name = "kindling"
-version = "23.0.0"
+version = "24.0.0"
 description = "Frozen In Flames: Kindling. Open Music Creation System."
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -13,6 +13,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+
+[project.scripts]
+kindling = "kindling.api.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
