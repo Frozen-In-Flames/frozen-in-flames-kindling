@@ -1,0 +1,199 @@
+{
+ "kind": "kindling/voice-character",
+ "schema_version": "8.0.0",
+ "id": "voice_aries",
+ "version": "v1",
+ "parent": null,
+ "name": "Aries",
+ "identity": {
+  "vector": [
+   69.2,
+   11.05,
+   2065.3,
+   4.3,
+   5.0,
+   183.39
+  ],
+  "description": "identity from reference analysis; performance instruction is a separate input and never changes this vector",
+  "method": "reference-deterministic"
+ },
+ "range_map": {
+  "low_midi": 38.1,
+  "high_midi": 79.4,
+  "registers": [
+   {
+    "name": "chest",
+    "low_midi": 0,
+    "high_midi": 63,
+    "reliability": 1.0,
+    "seconds_observed": 43.75
+   },
+   {
+    "name": "mix",
+    "low_midi": 64,
+    "high_midi": 71,
+    "reliability": 1.0,
+    "seconds_observed": 20.98
+   },
+   {
+    "name": "head",
+    "low_midi": 72,
+    "high_midi": 127,
+    "reliability": 1.0,
+    "seconds_observed": 109.96
+   }
+  ]
+ },
+ "timbre": {
+  "traits": [
+   "reference-derived"
+  ],
+  "register_transitions": [
+   "chest",
+   "mix",
+   "head"
+  ]
+ },
+ "pronunciation": {
+  "languages": [
+   "en"
+  ],
+  "g2p": "kindling.vocals.g2p"
+ },
+ "controls": {
+  "dynamics": {
+   "min": 0.0,
+   "max": 1.0,
+   "default": 0.7,
+   "help": "overall loudness intention, 0 whisper-quiet to 1 full voice"
+  },
+  "breathiness": {
+   "min": 0.0,
+   "max": 1.0,
+   "default": 0.15,
+   "help": "noise mixed with the pitched tone"
+  },
+  "vibrato_rate_hz": {
+   "min": 0.0,
+   "max": 9.0,
+   "default": 5.5,
+   "help": "0 disables vibrato"
+  },
+  "vibrato_depth_cents": {
+   "min": 0.0,
+   "max": 120.0,
+   "default": 35.0,
+   "help": "pitch excursion of the vibrato"
+  },
+  "belt": {
+   "min": 0.0,
+   "max": 1.0,
+   "default": 0.0,
+   "help": "brighter, more pressed harmonic balance"
+  },
+  "whisper": {
+   "min": 0.0,
+   "max": 1.0,
+   "default": 0.0,
+   "help": "1 is fully unvoiced; blends against pitched tone"
+  },
+  "phrasing_legato": {
+   "min": 0.0,
+   "max": 1.0,
+   "default": 0.7,
+   "help": "connectedness between syllables"
+  },
+  "timing_push_ms": {
+   "min": -120.0,
+   "max": 120.0,
+   "default": 0.0,
+   "help": "negative lays back, positive pushes ahead of the beat"
+  },
+  "doubles": {
+   "min": 0,
+   "max": 4,
+   "default": 0,
+   "help": "detuned unison copies; integer"
+  },
+  "harmonies": {
+   "min": 0,
+   "max": 4,
+   "default": 0,
+   "help": "diatonic third-above copies; integer"
+  }
+ },
+ "reference_summary": {
+  "duration_s": 183.39,
+  "voiced_s": 183.07,
+  "pitch_low_midi": 38.1,
+  "pitch_high_midi": 79.4,
+  "pitch_span_semitones": 41.3,
+  "dynamics_db": {
+   "p10": -12.1,
+   "p90": -7.8,
+   "range": 4.3
+  },
+  "registers": [
+   {
+    "name": "chest",
+    "low_midi": 0,
+    "high_midi": 63,
+    "reliability": 1.0,
+    "seconds_observed": 43.75
+   },
+   {
+    "name": "mix",
+    "low_midi": 64,
+    "high_midi": 71,
+    "reliability": 1.0,
+    "seconds_observed": 20.98
+   },
+   {
+    "name": "head",
+    "low_midi": 72,
+    "high_midi": 127,
+    "reliability": 1.0,
+    "seconds_observed": 109.96
+   }
+  ],
+  "vowels_observed": [
+   "AA?",
+   "AE?",
+   "EH?",
+   "IY?"
+  ],
+  "vowel_count": 5,
+  "languages": [
+   "en"
+  ],
+  "identity_vector": [
+   69.2,
+   11.05,
+   2065.3,
+   4.3,
+   5.0,
+   183.39
+  ],
+  "method": "reference-deterministic"
+ },
+ "owner": {
+  "id": "aries",
+  "name": "Aries Hilton"
+ },
+ "consent": {
+  "subject": "Aries Hilton",
+  "rights_basis": "consent",
+  "recorded_at": "2026-10-18T03:49:56.007341+00:00",
+  "source": "owner direct instruction in chat 2026-10-17: use my voice as the first voice character",
+  "verified_against_audio": true
+ },
+ "provenance": {
+  "created_at": "2026-10-18T03:49:56.029543+00:00",
+  "created_by": "aries",
+  "method": "kindling.assets.voice.create_voice_character"
+ },
+ "permissions": {
+  "share": "owner-only"
+ },
+ "revoked": false
+}
