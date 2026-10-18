@@ -15,7 +15,9 @@ import numpy as np
 
 
 def _hash_seed(*parts) -> int:
-    return abs(hash("|".join(str(p) for p in parts))) % (2 ** 31)
+    import hashlib
+    h = hashlib.sha256("|".join(str(p) for p in parts).encode()).hexdigest()
+    return int(h[:8], 16)
 
 
 class PerformanceEngine:
