@@ -238,6 +238,11 @@ async function refreshComposeSelects(preselectId) {
       const hit = assets.find(a => a.id === preselectId && a.assetKind === kind);
       if (hit) sel.value = hit.id;
     } else if (cur) sel.value = cur;
+    if (kind === "voice" && !sel.value) {
+      // Default to the factory voice so it is actually used, not just saved.
+      const factory = assets.find(a => a.assetKind === "voice" && a.factory);
+      if (factory) sel.value = factory.id;
+    }
   };
   fill("sel-voice", "voice");
   fill("sel-inst", "instrument");
@@ -267,7 +272,12 @@ async function renderCompose() {
     assets.instrument = { id: iId, slices: rec.payload.slices || [] };
   }
   if (pId) { const rec = await getAsset(pId); assets.preset = rec.payload; }
-  setStatus(status, "Rendering audio (offline)...");
+  if (!melody.length) {
+    const vname = vId ? " (voice selected but silent)" : "";
+    setStatus(status, `No lyrics detected${vname}: rendering an instrumental. Type lyrics, one per line, to hear the voice.`);
+  } else {
+    setStatus(status, "Rendering audio (offline)...");
+  }
   await yieldUi();
   try {
     const t0 = performance.now();

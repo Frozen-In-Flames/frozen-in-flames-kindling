@@ -13,10 +13,14 @@ const FORMANTS = {
   OW: [450, 1030], UH: [440, 1020], UW: [300, 870],
 };
 
-function vowelOf(syllable) {
+function vowelOf(syllable, observedLabels) {
   const m = (syllable || "").match(/[aeiouy]/);
-  if (!m) return "AH";
-  return { a: "AA", e: "EH", i: "IY", o: "OW", u: "UW", y: "IY" }[m[0]] || "AH";
+  const natural = m ? ({ a: "AA", e: "EH", i: "IY", o: "OW", u: "UW", y: "IY" }[m[0]] || "AH") : "AH";
+  if (!observedLabels || !observedLabels.length) return natural;
+  const clean = observedLabels.map(l => String(l).replace(/\?$/, ""));
+  if (clean.includes(natural)) return natural;
+  // The synth stays inside vowels actually observed in this voice.
+  return clean[0];
 }
 
 const FRICATIVES = new Set(["s", "f", "h", "z", "v", "x"]);
@@ -29,8 +33,10 @@ export function synthVowelNote(freq, dur, formantKey, rng, perf = {}) {
   const n = Math.max(16, Math.floor(dur * SR));
   const out = new Float32Array(n);
   const [F1, F2] = FORMANTS[formantKey] || FORMANTS.AH;
-  const vibRate = 5.5;
-  const vibDepth = 0.1 + (perf.belt || 0) * 0.12; // semitones
+  const vibRate = perf.vibratoRateHz ?? 5.5;
+  const vibDepth = perf.vibratoDepthCents != null
+    ? perf.vibratoDepthCents / 100
+    : (0.1 + (perf.belt || 0) * 0.12); // semitones
   let phase = 0;
   for (let i = 0; i < n; i++) {
     const t = i / SR;
@@ -87,7 +93,7 @@ function synthConsonant(prefix, rng) {
 
 export function synthSyllable(note, rng, perf) {
   const freq = midiToFreq(note.midi);
-  const vowel = synthVowelNote(freq, note.dur, vowelOf(note.syllable), rng, perf);
+  const vowel = synthVowelNote(freq, note.dur, vowelOf(note.syllable, perf.vowelLabels), rng, perf);
   const cons = synthConsonant(note.syllable, rng);
   if (!cons) return vowel;
   const out = new Float32Array(cons.length + vowel.length);
@@ -249,7 +255,21 @@ function pickSlice(slices, targetMidi, idx) {
   return slices[idx % slices.length];
 }
 
-// Compose the arrangement: bass, pluck, drums per bar; voice from melody.
+// Fit the melody into the selected voice's comfortable range, by octaves,
+// then clamp. A voice profile with no range map leaves the melody untouched.
+function fitMelodyToVoice(melody, voice) {
+  const rm = voice && voice.rangeMap;
+  if (!rm || rm.lowMidi == null || rm.highMidi == null) return melody;
+  const lo = rm.lowMidi, hi = rm.highMidi;
+  return melody.map(n => {
+    let m = n.midi, guard = 0;
+    while (m < lo && guard++ < 8) m += 12;
+    guard = 0;
+    while (m > hi && guard++ < 8) m -= 12;
+    m = Math.max(lo, Math.min(hi, m));
+    return { ...n, midi: Math.round(m) };
+  });
+}
 function scheduleArrangement(ctx, dest, scene, melody, assets, seed) {
   const rng = mulberry32(seed);
   const spb = 60 / scene.bpm; // seconds per beat
@@ -289,9 +309,19 @@ function scheduleArrangement(ctx, dest, scene, melody, assets, seed) {
       }
     }
   }
-  // Voice: syllable-timed formant synth.
-  const perf = { belt: 0.2 };
-  for (const note of melody) {
+  // Voice: syllable-timed formant synth, shaped by the selected voice profile:
+  // melody fitted to its range, formants kept inside its observed vowels,
+  // vibrato and belt from its performance defaults.
+  const v = assets.voice || {};
+  const vperf = v.performance || {};
+  const perf = {
+    belt: vperf.belt ?? 0.2,
+    vibratoRateHz: vperf.vibratoRateHz ?? 5.5,
+    vibratoDepthCents: vperf.vibratoDepthCents ?? null,
+    vowelLabels: ((v.timbre && v.timbre.vowelStates) || []).map(s => s.label),
+  };
+  const fitted = fitMelodyToVoice(melody, v);
+  for (const note of fitted) {
     const buf = synthSyllable(note, rng, perf);
     scheduleBuffer(ctx, dest.voice, buf, note.start, 0.8);
   }
