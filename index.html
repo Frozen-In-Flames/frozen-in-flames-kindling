@@ -19,6 +19,7 @@
   <button id="nav-upload" class="active">Upload</button>
   <button id="nav-library">Library</button>
   <button id="nav-compose">Compose</button>
+  <button id="nav-updates">Updates</button>
 </nav>
 
 <main>
@@ -87,9 +88,15 @@
       </div>
     </div>
   </section>
+  <section id="tab-updates" class="tab">
+    <h2>What changed</h2>
+    <p class="dim">Every update, newest first. Nothing is ever removed, each version stays in the record.</p>
+    <div id="changelog-list"><p class="dim">Loading...</p></div>
+  </section>
 </main>
 
 <footer>
+  <p id="app-version" class="dim"></p>
   <p>Honest synthesis: voices here are a reference procedural voice, not a learned singing model. Instruments are your samples or procedural tones. Everything runs locally in your browser.</p>
   <p><a href="https://github.com/Frozen-In-Flames/frozen-in-flames-kindling">Frozen In Flames: Kindling on GitHub</a> (Apache-2.0)</p>
 </footer>

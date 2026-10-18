@@ -2,6 +2,7 @@
 !.gitignore
 !index.html
 !style.css
+!changelog.json
 !js/
 !js/**
 !seeds/

@@ -13,13 +13,34 @@ import { renderSong } from "./render.js?v=5";
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+const TABS = ["upload", "library", "compose", "updates"];
+
 function showTab(name) {
-  for (const t of ["upload", "library", "compose"]) {
+  for (const t of TABS) {
     $("tab-" + t).classList.toggle("active", t === name);
     $("nav-" + t).classList.toggle("active", t === name);
   }
   if (name === "library") refreshLibrary();
   if (name === "compose") refreshComposeSelects();
+  if (name === "updates") loadChangelog();
+}
+
+async function loadChangelog() {
+  const list = $("changelog-list");
+  try {
+    const res = await fetch(new URL("changelog.json?v=5", document.baseURI));
+    if (!res.ok) throw new Error("unavailable");
+    const data = await res.json();
+    const ver = $("app-version");
+    if (ver && data.latest) ver.textContent = `Kindling web ${data.latest}: upload, save, compose, render, download. All on this device.`;
+    list.innerHTML = (data.entries || []).map(e => `
+      <div class="asset">
+        <div class="ahead"><span class="badge voice">${escapeHtml(e.version)}</span><span class="dim">${escapeHtml(e.date || "")}</span></div>
+        <div class="adetail">${(e.changes || []).map(c => `&bull; ${escapeHtml(c)}`).join("<br>")}</div>
+      </div>`).join("") || `<p class="dim">No updates listed yet.</p>`;
+  } catch (err) {
+    list.innerHTML = `<p class="dim">Changelog unavailable offline. Your library and renders still work.</p>`;
+  }
 }
 
 let pendingAnalysis = null;
@@ -368,7 +389,7 @@ async function seedDefaultVoice() {
 
 function wire() {
   seedDefaultVoice();
-  for (const t of ["upload", "library", "compose"]) {
+  for (const t of TABS) {
     $("nav-" + t).addEventListener("click", () => showTab(t));
   }
   $("kind").addEventListener("change", () => {
