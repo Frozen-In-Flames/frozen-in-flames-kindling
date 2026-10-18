@@ -1,6 +1,6 @@
 [project]
 name = "kindling"
-version = "14.0.0"
+version = "15.0.0"
 description = "Frozen In Flames: Kindling. Open Music Creation System."
 readme = "README.md"
 license = { text = "Apache-2.0" }
