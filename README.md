@@ -65,6 +65,14 @@ kindling export song/ --format stems --out song-stems/
 
 Install the command with `pip install -e .` then use `kindling` directly.
 
+### Web app
+
+Kindling runs in the browser, no server needed: upload your audio, save voice characters, instruments, and presets, compose from a prompt and lyrics, render, and download the WAV.
+
+Live: https://frozen-in-flames.github.io/frozen-in-flames-kindling/
+
+The app lives in [web/](web/) and is published to GitHub Pages from the `gh-pages` branch.
+
 ### License
 
 Apache-2.0. See [LICENSE](LICENSE).
