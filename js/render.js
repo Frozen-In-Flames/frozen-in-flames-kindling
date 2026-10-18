@@ -3,7 +3,7 @@
 // singing model. Same seed renders the same choices. Stems are pre-preset;
 // the mix runs through the preset chain on the mix bus.
 
-import { midiToFreq, mulberry32 } from "./audio.js";
+import { midiToFreq, mulberry32 } from "./audio.js?v=5";
 
 const SR = 44100;
 
