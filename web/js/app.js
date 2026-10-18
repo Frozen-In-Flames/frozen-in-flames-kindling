@@ -1,14 +1,14 @@
 // Kindling web app: upload -> analyze -> save -> compose -> render -> download.
 // All client-side. AudioContext is resumed on user gesture (iPhone safe).
 
-import { resumeAudio, decodeFile, mixdownMono, audioBufferToWavBlob, shareOrDownloadBlob } from "./audio.js";
+import { resumeAudio, decodeFile, mixdownMono, audioBufferToWavBlob, shareOrDownloadBlob } from "./audio.js?v=5";
 import {
   analyzePitch, analyzeVowelStates, analyzeTempo, analyzeProduction,
   detectOnsets, proposePreset, sufficiencyReport,
-} from "./analysis.js";
-import { saveAsset, listAssets, getAsset, renameAsset, deleteAsset, hasAsset, putRecord } from "./library.js";
-import { buildScene, layoutSections, assignMelody } from "./compose.js";
-import { renderSong } from "./render.js";
+} from "./analysis.js?v=5";
+import { saveAsset, listAssets, getAsset, renameAsset, deleteAsset, hasAsset, putRecord } from "./library.js?v=5";
+import { buildScene, layoutSections, assignMelody, extractLyricsFromPrompt } from "./compose.js?v=5";
+import { renderSong } from "./render.js?v=5";
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -254,7 +254,14 @@ let lastRender = null;
 async function renderCompose() {
   const status = $("compose-status");
   const prompt = $("prompt").value.trim();
-  const lyrics = $("lyrics").value.trim();
+  let lyrics = $("lyrics").value.trim();
+  let lyricSource = "lyrics";
+  if (!lyrics && prompt) {
+    // Lyrics typed into the prompt field still sing: strip the production
+    // directives and use the lyric-like remainder.
+    lyrics = extractLyricsFromPrompt(prompt);
+    if (lyrics) lyricSource = "prompt";
+  }
   if (!prompt && !lyrics) { setStatus(status, "Give a prompt, lyrics, or both.", "err"); return; }
   setStatus(status, "Building scene...");
   await yieldUi();
@@ -275,6 +282,8 @@ async function renderCompose() {
   if (!melody.length) {
     const vname = vId ? " (voice selected but silent)" : "";
     setStatus(status, `No lyrics detected${vname}: rendering an instrumental. Type lyrics, one per line, to hear the voice.`);
+  } else if (lyricSource === "prompt") {
+    setStatus(status, "No lyrics-box text: singing the lyric-like words from your prompt. For full control, put lyrics in the Lyrics box.");
   } else {
     setStatus(status, "Rendering audio (offline)...");
   }

@@ -1,7 +1,7 @@
 // Prompt + lyrics -> scene. A readable plan: tempo, key, sections with
 // chord progressions, syllable-timed vocal lines. Deterministic per seed.
 
-import { mulberry32 } from "./audio.js";
+import { mulberry32 } from "./audio.js?v=5";
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const NOTE_SEMI = { C: 0, "C#": 1, Db: 1, D: 2, "D#": 3, Eb: 3, E: 4, F: 5, "F#": 6, Gb: 6, G: 7, "G#": 8, Ab: 8, A: 9, "A#": 10, Bb: 10, B: 11 };
@@ -100,7 +100,22 @@ export function buildScene({ prompt, lyrics, seed }) {
   return scene;
 }
 
-// Assign each syllable a note: chord tones with stepwise drift, seeded.
+// Recover lyric-like text from the prompt when the Lyrics box is empty:
+// strip production directives (bpm, sections, mood, key) and keep the rest.
+// Returns "" when nothing lyric-like remains.
+export function extractLyricsFromPrompt(prompt) {
+  let t = (prompt || "").toLowerCase();
+  t = t.replace(/\d{2,3}\s*bpm/g, " ");
+  t = t.replace(/\b(intro|verse|pre-?chorus|chorus|bridge|outro)\b/g, " ");
+  t = t.replace(/\b(bright|happy|uplift(?:ing)?|summer|dark|heavy|hard|soft|slow|fast|driving|deep|brood(?:ing)?|cold|tense|chill)\b/g, " ");
+  t = t.replace(/\bkey of [a-g][#b]?\b/g, " ");
+  t = t.replace(/\bin [a-g][#b]?\s*(?:minor|major|min|maj)\b/g, " ");
+  t = t.replace(/[,.;:!?()[\]"]+/g, " ");
+  t = t.replace(/\s+/g, " ").trim();
+  t = t.replace(/^(and|with|plus)\s+/g, "");
+  if (t.split(" ").filter(Boolean).length < 2) return "";
+  return t;
+}
 export function assignMelody(scene, seed) {
   const rand = mulberry32(seed ^ 0x9e37);
   const notes = [];
