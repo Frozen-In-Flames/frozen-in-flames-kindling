@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Frozen In Flames: Kindling, Open Music Creation System</title>
 <meta name="description" content="Upload your audio, save reusable voice characters, instruments, and presets, then render songs from them. All in the browser.">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 <header class="hero">
@@ -54,6 +54,18 @@
     <h2>Your kindling</h2>
     <p class="dim">Saved voice characters, instruments, and presets. Stored on this device.</p>
     <div id="asset-list"></div>
+
+    <div id="calibrate-panel" style="display:none">
+      <h3>Calibrate words for <span id="cal-voice-name"></span></h3>
+      <p class="dim">Some words, the reading rules are likely to get wrong for this voice. Give one take of each word you care about: sing or say the word once, on its own, close to the mic in a quiet, dry room (no reverb, no effects). Singing or speaking both work, because the fit measures the shape of the vowel (its formants), and formants do not depend on pitch. One good take per word is the design point.</p>
+      <p class="dim">Each accepted take is measured and stored as numbers inside this voice profile: a verified reading for that word, small corrections that also help other words sharing the same sounds, and the take itself, kept with its date and source under the same consent record as the voice. This is a calibration layer stored as data in the profile. It is not a trained model. A take that is clipped, too short, or too noisy is refused with the reason shown, and nothing is fitted from it.</p>
+      <p id="cal-status" class="status"></p>
+      <div id="cal-list"></div>
+      <div class="btnrow">
+        <button id="cal-close">Done</button>
+      </div>
+      <input type="file" id="cal-file" accept="audio/*" style="display:none">
+    </div>
   </section>
 
   <section id="tab-compose" class="tab">
@@ -163,6 +175,6 @@
   <p><a href="https://github.com/Frozen-In-Flames/frozen-in-flames-kindling">Frozen In Flames: Kindling on GitHub</a> (Apache-2.0)</p>
 </footer>
 
-<script type="module" src="js/app.js?v=7"></script>
+<script type="module" src="js/app.js?v=8"></script>
 </body>
 </html>

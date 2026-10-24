@@ -1,15 +1,18 @@
 // Kindling web app: upload -> analyze -> save -> compose -> render -> download.
 // All client-side. AudioContext is resumed on user gesture (iPhone safe).
 
-import { resumeAudio, decodeFile, mixdownMono, audioBufferToWavBlob, shareOrDownloadBlob } from "./audio.js?v=7";
+import { resumeAudio, decodeFile, mixdownMono, audioBufferToWavBlob, shareOrDownloadBlob } from "./audio.js?v=8";
 import {
   analyzePitch, analyzeVowelStates, analyzeTempo, analyzeProduction,
   detectOnsets, proposePreset, sufficiencyReport,
-} from "./analysis.js?v=7";
-import { saveAsset, listAssets, getAsset, renameAsset, deleteAsset, hasAsset, putRecord } from "./library.js?v=7";
-import { buildScene, layoutSections, assignMelody, extractLyricsFromPrompt } from "./compose.js?v=7";
-import { renderSong } from "./render.js?v=7";
-import { TRACKS, newMixState, trackGain, fmtTime } from "./mixer.js?v=7";
+} from "./analysis.js?v=8";
+import { saveAsset, listAssets, getAsset, renameAsset, deleteAsset, hasAsset, putRecord, putAudio } from "./library.js?v=8";
+import { buildScene, layoutSections, assignMelody, extractLyricsFromPrompt } from "./compose.js?v=8";
+import { renderSong } from "./render.js?v=8";
+import { TRACKS, newMixState, trackGain, fmtTime } from "./mixer.js?v=8";
+import { buildTargetList, calibrationSummary, clearCalibration } from "./calibration.js?v=8";
+import { solveWordCalibration } from "./calibrate.js?v=8";
+import { observedTargetsFromLabels } from "./phonemes.js?v=8";
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -29,7 +32,7 @@ function showTab(name) {
 async function loadChangelog() {
   const list = $("changelog-list");
   try {
-    const res = await fetch(new URL("changelog.json?v=7", document.baseURI));
+    const res = await fetch(new URL("changelog.json?v=8", document.baseURI));
     if (!res.ok) throw new Error("unavailable");
     const data = await res.json();
     const ver = $("app-version");
@@ -210,6 +213,7 @@ async function refreshLibrary() {
       <div class="adetail">${describeAsset(a)}</div>
       <div class="arowbtns">
         <button data-act="use" data-id="${a.id}">Use in Compose</button>
+        ${a.assetKind === "voice" ? `<button data-act="calibrate" data-id="${a.id}">Calibrate words</button>` : ""}
         <button data-act="rename" data-id="${a.id}">Rename</button>
         <button data-act="del" data-id="${a.id}" class="danger">Delete</button>
       </div>`;
@@ -225,6 +229,8 @@ async function refreshLibrary() {
         if (n) { await renameAsset(id, n); refreshLibrary(); }
       } else if (act === "use") {
         showTab("compose"); refreshComposeSelects(id);
+      } else if (act === "calibrate") {
+        openCalibrate(id);
       }
     });
   });
@@ -446,6 +452,146 @@ async function downloadLastStems() {
   setStatus($("compose-status"), `Rendered ${Math.round(lastRender.scene.totalSeconds)}s. Seed ${lastRender.seed}.`, "ok");
 }
 
+// ---- Word calibration (V27) -------------------------------------------
+// One take per target word, fitted mathematically into the voice's
+// calibration layer (the data schema lives in calibration.js). The take
+// itself is stored in the library's content-addressed audio store, under
+// the same consent framing as the voice asset it belongs to; the fitted
+// numbers live in the voice record's payload.calibration. This is a
+// calibration layer stored as data, not a trained model, and the panel
+// copy says so.
+let calSession = null; // { id, record, pendingWord }
+let calRecorder = null; // { recorder, stream }
+
+async function openCalibrate(voiceId) {
+  const record = await getAsset(voiceId);
+  if (!record) return;
+  calSession = { id: voiceId, record, pendingWord: null };
+  $("cal-voice-name").textContent = record.name;
+  $("calibrate-panel").style.display = "block";
+  setStatus($("cal-status"), "");
+  renderCalList();
+  $("calibrate-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function calObservedTargets(record) {
+  const states = (record.payload.timbre && record.payload.timbre.vowelStates) || [];
+  return observedTargetsFromLabels(states.map(s => s.label));
+}
+
+function renderCalList() {
+  const box = $("cal-list");
+  if (!calSession) { box.innerHTML = ""; return; }
+  const { record } = calSession;
+  const calibration = record.payload.calibration || null;
+  const lyrics = ($("lyrics") && $("lyrics").value) || "";
+  const targets = buildTargetList({ calibration, texts: [lyrics] });
+  const sum = calibrationSummary(calibration);
+  box.innerHTML = `<p class="dim">${sum.calibrated} calibrated, ${sum.rejected} refused so far. Words from your current Compose lyrics come first.</p>`;
+  for (const t of targets) {
+    const row = document.createElement("div");
+    row.className = "asset";
+    let statusHtml;
+    if (t.status === "calibrated") {
+      statusHtml = `<span class="badge voice">calibrated</span> heard as ${escapeHtml(t.producedVowel || "?")}`;
+    } else if (t.status === "rejected") {
+      statusHtml = `<span class="badge">not fitted</span> ${escapeHtml(t.statusReason || "")}`;
+    } else {
+      statusHtml = `<span class="badge">uncalibrated</span> ${escapeHtml(t.reasons.join("; "))}`;
+    }
+    row.innerHTML = `
+      <div class="ahead"><b>${escapeHtml(t.word)}</b><span class="dim">${escapeHtml(t.reading.join(" "))}</span></div>
+      <div class="adetail">${statusHtml}</div>
+      <div class="arowbtns">
+        <button data-cal="record" data-word="${escapeHtml(t.word)}">Record</button>
+        <button data-cal="upload" data-word="${escapeHtml(t.word)}">Upload take</button>
+        ${t.status !== "uncalibrated" ? `<button data-cal="clear" data-word="${escapeHtml(t.word)}">Clear</button>` : ""}
+      </div>`;
+    box.appendChild(row);
+  }
+  box.querySelectorAll("button[data-cal]").forEach(b => {
+    b.addEventListener("click", () => calRowAction(b));
+  });
+}
+
+async function calRowAction(btn) {
+  if (!calSession) return;
+  const word = btn.dataset.word;
+  const act = btn.dataset.cal;
+  if (act === "upload") {
+    calSession.pendingWord = word;
+    $("cal-file").click();
+  } else if (act === "clear") {
+    const { record } = calSession;
+    record.payload.calibration = clearCalibration(record.payload.calibration, word);
+    await putRecord(record);
+    setStatus($("cal-status"), `Calibration for "${word}" cleared.`);
+    renderCalList();
+  } else if (act === "record") {
+    await toggleCalRecording(word, btn);
+  }
+}
+
+async function toggleCalRecording(word, btn) {
+  const status = $("cal-status");
+  if (calRecorder) {
+    calRecorder.recorder.stop();
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    setStatus(status, "Microphone unavailable. Upload a take instead.", "err");
+    return;
+  }
+  const recorder = new MediaRecorder(stream);
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  recorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    calRecorder = null;
+    btn.textContent = "Record";
+    const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+    await fitCalSample(word, blob, "recorded");
+  };
+  calRecorder = { recorder, stream };
+  recorder.start();
+  btn.textContent = "Stop and fit";
+  setStatus(status, `Recording "${word}": sing or say it once, then press Stop and fit.`);
+}
+
+async function fitCalSample(word, blob, source) {
+  const status = $("cal-status");
+  if (!calSession) return;
+  const { record } = calSession;
+  setStatus(status, `Measuring "${word}"...`);
+  await yieldUi();
+  let decoded;
+  try {
+    decoded = await decodeFile(blob);
+  } catch (e) {
+    setStatus(status, "Could not decode that take. Try WAV, MP3, or M4A, or record again.", "err");
+    return;
+  }
+  const mono = mixdownMono(decoded.channels);
+  const audioSha = await putAudio(mono, decoded.sampleRate).catch(() => null);
+  const result = solveWordCalibration({
+    calibration: record.payload.calibration || null,
+    word, mono, sampleRate: decoded.sampleRate,
+    observedTargets: calObservedTargets(record),
+    source, audioSha,
+  });
+  record.payload.calibration = result.calibration;
+  await putRecord(record);
+  if (result.refused) {
+    setStatus(status, `"${word}" not fitted: ${result.refused}`, "err");
+  } else {
+    setStatus(status, `"${word}" calibrated: heard as ${result.produced.ph}. The verified reading and the corrections are saved in this voice profile.`, "ok");
+  }
+  renderCalList();
+}
+
 // The owner's voice ships as the default character for every user, so the
 // demo works even before anyone uploads anything. Users keep and add their
 // own assets alongside it; seeding never touches existing records. Runs once
@@ -512,6 +658,15 @@ function wire() {
   });
   $("dl-mix").addEventListener("click", downloadLastMix);
   $("dl-stems").addEventListener("click", downloadLastStems);
+  $("cal-close").addEventListener("click", () => {
+    $("calibrate-panel").style.display = "none";
+  });
+  $("cal-file").addEventListener("change", async () => {
+    const f = $("cal-file").files[0];
+    const word = calSession && calSession.pendingWord;
+    $("cal-file").value = "";
+    if (f && word) await fitCalSample(word, f, "uploaded");
+  });
   showTab("upload");
   refreshComposeSelects();
 }

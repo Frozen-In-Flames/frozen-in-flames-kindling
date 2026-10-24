@@ -3,11 +3,12 @@
 // singing model. Same seed renders the same choices. Stems are pre-preset;
 // the mix runs through the preset chain on the mix bus.
 
-import { midiToFreq, mulberry32 } from "./audio.js?v=7";
+import { midiToFreq, mulberry32 } from "./audio.js?v=8";
 import {
-  CONSONANTS, VOWEL_FORMANTS, DIPHTHONG_FORMANTS, isVowel,
+  CONSONANTS, VOWEL_FORMANTS, DIPHTHONG_FORMANTS, isVowel, FORMANT_CLAMP,
   warpVowelTarget, observedTargetsFromLabels, scoreFragment,
-} from "./phonemes.js?v=7";
+} from "./phonemes.js?v=8";
+import { resolveNoteCalibration, calibrationSummary } from "./calibration.js?v=8";
 
 const SR = 44100;
 
@@ -36,13 +37,15 @@ function fixedDur(ph) {
 
 // Time-proportion a note: onsets and codas take their articulation times
 // (scaled down together if the note is short), the nucleus takes the rest
-// and carries the pitch.
-function buildSegments(phonemes, totalDur) {
+// and carries the pitch. durScales (V27 calibration) nudges individual
+// consonant durations toward what the singer's samples measured.
+function buildSegments(phonemes, totalDur, durScales = null) {
   const nucIdx = phonemes.findIndex(isVowel);
   let consT = 0;
   const fixed = phonemes.map((ph, idx) => {
     if (idx === nucIdx) return 0;
-    const d = fixedDur(ph); consT += d; return d;
+    const d = fixedDur(ph) * (durScales && durScales[ph] ? durScales[ph] : 1);
+    consT += d; return d;
   });
   const budget = totalDur * 0.5;
   const scale = consT > budget && consT > 0 ? budget / consT : 1;
@@ -56,29 +59,52 @@ function buildSegments(phonemes, totalDur) {
   });
 }
 
+// Calibration offsets (V27): log-space deltas on a formant target, from
+// the aggregated per-phoneme corrections. `which` selects the endpoint
+// for diphthongs ("from" / "to"); steady targets use the plain delta.
+function applyCalOffset(target, cal, ph, which) {
+  const off = cal && cal.offsets ? cal.offsets[ph] : null;
+  if (!off) return target;
+  const d = which === "to" ? (off.dTo || off.d)
+    : which === "from" ? (off.dFrom || off.d) : off.d;
+  if (!d) return target;
+  return target.map((f, i) => {
+    const v = Math.exp(Math.log(f) + (d[i] || 0));
+    return Math.max(FORMANT_CLAMP[0], Math.min(FORMANT_CLAMP[1], v));
+  });
+}
+
 // Formant keyframes across the note. Diphthongs get two keys (the glide);
 // liquids and glides are warped like vowels; nasals keep their murmur
 // targets; obstruents add no keys, so the track glides between the voiced
 // neighbors around them, as a real vocal tract does.
-function buildFormantTrack(segs, observed) {
+// V27 calibration ladder, applied per key: a measured word track for
+// this note's nucleus replaces its keys outright; otherwise aggregated
+// phoneme offsets shift the warped target; the floor is V26 behavior.
+function buildFormantTrack(segs, observed, cal = null, nucIdx = -1) {
   const keys = [];
-  for (const seg of segs) {
+  const track = cal && cal.track ? cal.track : null;
+  segs.forEach((seg, idx) => {
     if (isVowel(seg.ph)) {
-      if (DIPHTHONG_FORMANTS[seg.ph]) {
+      if (idx === nucIdx && track && track.nucleusPh === seg.ph) {
+        for (const k of track.keys) {
+          keys.push({ t: seg.start + k.u * seg.dur, f: k.f.slice() });
+        }
+      } else if (DIPHTHONG_FORMANTS[seg.ph]) {
         const [a, b] = DIPHTHONG_FORMANTS[seg.ph];
-        keys.push({ t: seg.start + seg.dur * 0.22, f: warpVowelTarget(a, observed) });
-        keys.push({ t: seg.start + seg.dur * 0.85, f: warpVowelTarget(b, observed) });
+        keys.push({ t: seg.start + seg.dur * 0.22, f: applyCalOffset(warpVowelTarget(a, observed), cal, seg.ph, "from") });
+        keys.push({ t: seg.start + seg.dur * 0.85, f: applyCalOffset(warpVowelTarget(b, observed), cal, seg.ph, "to") });
       } else {
-        keys.push({ t: seg.start + seg.dur * 0.5, f: warpVowelTarget(VOWEL_FORMANTS[seg.ph], observed) });
+        keys.push({ t: seg.start + seg.dur * 0.5, f: applyCalOffset(warpVowelTarget(VOWEL_FORMANTS[seg.ph], observed), cal, seg.ph) });
       }
     } else if (seg.info && seg.info.formants) {
       const warpIt = seg.info.cls === "liquid" || seg.info.cls === "glide";
       keys.push({
         t: seg.start + seg.dur * 0.5,
-        f: warpIt ? warpVowelTarget(seg.info.formants, observed) : seg.info.formants.slice(),
+        f: applyCalOffset(warpIt ? warpVowelTarget(seg.info.formants, observed) : seg.info.formants.slice(), cal, seg.ph),
       });
     }
-  }
+  });
   if (!keys.length) keys.push({ t: 0, f: VOWEL_FORMANTS.AH.slice() });
   keys.sort((a, b) => a.t - b.t);
   return keys;
@@ -143,16 +169,29 @@ function peaking(freq, q, gainDb) {
 }
 
 // Direct buffer synthesis of one sung (or whispered) syllable note.
+// note.cal (V27, resolved by the caller from the voice's calibration
+// layer) may carry a word-level phoneme override, a measured formant
+// track for the nucleus, and aggregated phoneme offsets. With no cal,
+// the render is exactly V26.
 export function synthVocalNote(note, rng, perf = {}) {
-  const phonemes = (note.phonemes && note.phonemes.length)
-    ? note.phonemes.slice()
-    : scoreFragment(note.syllable).phonemes;
+  const cal = note.cal || null;
+  const phonemes = (cal && cal.phonemes && cal.phonemes.length)
+    ? cal.phonemes.slice()
+    : (note.phonemes && note.phonemes.length)
+      ? note.phonemes.slice()
+      : scoreFragment(note.syllable).phonemes;
   const dur = Math.max(0.05, note.dur || 0.3);
   const n = Math.max(16, Math.floor(dur * SR));
   const out = new Float32Array(n);
   const observed = perf.observedTargets || observedTargetsFromLabels(perf.vowelLabels);
-  const segs = buildSegments(phonemes.length ? phonemes : ["AH"], dur);
-  const keys = buildFormantTrack(segs, observed);
+  const durScales = {};
+  if (cal && cal.offsets) {
+    for (const [ph, o] of Object.entries(cal.offsets)) {
+      if (o && o.dur) durScales[ph] = o.dur;
+    }
+  }
+  const segs = buildSegments(phonemes.length ? phonemes : ["AH"], dur, durScales);
+  const keys = buildFormantTrack(segs, observed, cal, phonemes.findIndex(isVowel));
   const whisper = !!perf.whisper;
   const baseFreq = midiToFreq(note.midi || 69);
   const vibRate = perf.vibratoRateHz ?? 5.5;
@@ -451,6 +490,10 @@ function scheduleArrangement(ctx, dest, scene, melody, assets, seed, whisper = f
   // Voice: phoneme-score formant synth (V26). The melody is fitted to the
   // profile's range and the formant targets are warped (bounded) toward
   // its observed vowel space, but the phonemes come from the lyrics alone.
+  // V27: the voice's calibration layer (fitted from the singer's own word
+  // samples, stored as data in the profile) resolves per note: a word's
+  // measured track and verified reading first, aggregated phoneme
+  // corrections beneath, the warp beneath those.
   const v = assets.voice || {};
   const vperf = v.performance || {};
   const perf = {
@@ -461,10 +504,12 @@ function scheduleArrangement(ctx, dest, scene, melody, assets, seed, whisper = f
     observedTargets: observedTargetsFromLabels(
       ((v.timbre && v.timbre.vowelStates) || []).map(s => s.label)),
     whisper: !!whisper,
+    calibration: v.calibration || null,
   };
   const fitted = fitMelodyToVoice(melody, v);
   for (const note of fitted) {
-    const buf = synthSyllable(note, rng, perf);
+    const cal = resolveNoteCalibration(perf.calibration, note);
+    const buf = synthSyllable(cal ? { ...note, cal } : note, rng, perf);
     scheduleBuffer(ctx, dest.voice, buf, note.start, 0.8);
   }
 }
@@ -498,6 +543,7 @@ export async function renderSong({ scene, melody, assets, seed, whisper = false 
   const voice = await renderGroups({ scene, melody, assets, seed, groups: { voice: true, instruments: false, drums: false }, applyChain: false, whisper });
   const instruments = await renderGroups({ scene, melody, assets, seed, groups: { voice: false, instruments: true, drums: false }, applyChain: false, whisper });
   const drums = await renderGroups({ scene, melody, assets, seed, groups: { voice: false, instruments: false, drums: true }, applyChain: false, whisper });
+  const calSum = calibrationSummary(assets.voice ? assets.voice.calibration : null);
   return {
     mix, stems: { voice, instruments, drums },
     meta: {
@@ -507,7 +553,11 @@ export async function renderSong({ scene, melody, assets, seed, whisper = false 
       presetConfidence: assets.preset ? assets.preset.confidence : null,
       voiceId: assets.voice ? assets.voice.id : "guide",
       instrumentId: assets.instrument ? assets.instrument.id : "builtin",
-      honesty: "Reference procedural synthesis. Lyrics are converted to English phonemes and sung through moving formant filters: the words are generated in shaped noise first, then retuned to the voice profile (a bounded formant warp, phonemes unchanged), or left as a pure whisper. Not a learned singing model. Instruments are samples or procedural tones, not learned instruments.",
+      calibrationWords: calSum.calibrated,
+      honesty: "Reference procedural synthesis. Lyrics are converted to English phonemes and sung through moving formant filters: the words are generated in shaped noise first, then retuned to the voice profile (a bounded formant warp, phonemes unchanged), or left as a pure whisper. Not a learned singing model. Instruments are samples or procedural tones, not learned instruments."
+        + (calSum.calibrated
+          ? ` Voice calibration: ${calSum.calibrated} word(s) fitted from the singer's own samples and stored as measurements in the profile. That is a calibration layer, not a trained model.`
+          : ""),
     },
   };
 }
