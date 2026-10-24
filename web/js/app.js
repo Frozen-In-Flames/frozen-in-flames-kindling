@@ -1,15 +1,15 @@
 // Kindling web app: upload -> analyze -> save -> compose -> render -> download.
 // All client-side. AudioContext is resumed on user gesture (iPhone safe).
 
-import { resumeAudio, decodeFile, mixdownMono, audioBufferToWavBlob, shareOrDownloadBlob } from "./audio.js?v=6";
+import { resumeAudio, decodeFile, mixdownMono, audioBufferToWavBlob, shareOrDownloadBlob } from "./audio.js?v=7";
 import {
   analyzePitch, analyzeVowelStates, analyzeTempo, analyzeProduction,
   detectOnsets, proposePreset, sufficiencyReport,
-} from "./analysis.js?v=6";
-import { saveAsset, listAssets, getAsset, renameAsset, deleteAsset, hasAsset, putRecord } from "./library.js?v=6";
-import { buildScene, layoutSections, assignMelody, extractLyricsFromPrompt } from "./compose.js?v=6";
-import { renderSong } from "./render.js?v=6";
-import { TRACKS, newMixState, trackGain, fmtTime } from "./mixer.js?v=6";
+} from "./analysis.js?v=7";
+import { saveAsset, listAssets, getAsset, renameAsset, deleteAsset, hasAsset, putRecord } from "./library.js?v=7";
+import { buildScene, layoutSections, assignMelody, extractLyricsFromPrompt } from "./compose.js?v=7";
+import { renderSong } from "./render.js?v=7";
+import { TRACKS, newMixState, trackGain, fmtTime } from "./mixer.js?v=7";
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -29,7 +29,7 @@ function showTab(name) {
 async function loadChangelog() {
   const list = $("changelog-list");
   try {
-    const res = await fetch(new URL("changelog.json?v=6", document.baseURI));
+    const res = await fetch(new URL("changelog.json?v=7", document.baseURI));
     if (!res.ok) throw new Error("unavailable");
     const data = await res.json();
     const ver = $("app-version");
@@ -315,7 +315,8 @@ async function renderCompose() {
   await yieldUi();
   try {
     const t0 = performance.now();
-    const result = await renderSong({ scene, melody, assets, seed });
+    const whisper = !!($("chk-whisper") && $("chk-whisper").checked);
+    const result = await renderSong({ scene, melody, assets, seed, whisper });
     const ms = Math.round(performance.now() - t0);
     lastRender = { ...result, scene, seed };
     buildTimeline(scene);
@@ -326,7 +327,7 @@ async function renderCompose() {
     $("dl-stems").disabled = false;
     const meta = result.meta;
     $("render-meta").innerHTML =
-      `Voice: <b>${escapeHtml(meta.voiceId)}</b> (reference procedural voice, not a learned singing model)<br>` +
+      `Voice: <b>${escapeHtml(meta.voiceId)}</b> (reference procedural voice, not a learned singing model)${meta.whisperMode ? " - whisper mode: words in noise, no pitch" : ""}<br>` +
       `Instrument: <b>${escapeHtml(meta.instrumentId)}</b><br>` +
       `Preset: <b>${meta.presetApplied ? "applied" : "none"}</b>${meta.presetConfidence != null ? ` (confidence ${meta.presetConfidence})` : ""}<br>` +
       `<span class="dim">${escapeHtml(meta.honesty)}</span>`;
