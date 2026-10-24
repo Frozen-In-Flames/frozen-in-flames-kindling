@@ -323,13 +323,27 @@ export function phonemesForWord(raw) {
   return groups;
 }
 
+// The canonical key for a word wherever word-level data is keyed (the
+// calibration layer in calibration.js uses the same key): lowercase
+// letters only, punctuation and case gone.
+export function wordKey(raw) {
+  return String(raw || "").toLowerCase().replace(/[^a-z]/g, "");
+}
+
 // Score a whole lyric line: an array parallel to syllabify(line) chunks,
-// each {chunk, phonemes, nucleus}. If the chunk parity with compose's
-// syllabify ever breaks, callers detect a length mismatch and fall back.
+// each {chunk, phonemes, nucleus, word, chunkIndex}. word/chunkIndex are
+// metadata for layers keyed by word (calibration); they change nothing
+// about the score itself. If the chunk parity with compose's syllabify
+// ever breaks, callers detect a length mismatch and fall back.
 export function scoreLine(line) {
   const words = String(line || "").trim().split(/\s+/).filter(Boolean);
   const out = [];
-  for (const w of words) out.push(...phonemesForWord(w));
+  for (const w of words) {
+    const groups = phonemesForWord(w);
+    const key = wordKey(w);
+    groups.forEach((g, gi) => { g.word = key; g.chunkIndex = gi; });
+    out.push(...groups);
+  }
   return out;
 }
 
