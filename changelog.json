@@ -1,6 +1,16 @@
 {
  "entries": [
   {
+   "version": "v8",
+   "date": "2026-10-24",
+   "changes": [
+    "New for voice characters: Calibrate words (in the Library). The app lists the words its reading rules are most likely to get wrong, starting with words from your current lyrics, and you give one take of each: record it here or upload a file.",
+    "Each accepted take is measured (the vowel's formant shape, segment timing, ending energy) and fitted mathematically: a verified reading for that word, plus small per-sound corrections that also help other words sharing those sounds.",
+    "Calibration is data stored inside the voice profile, not a trained model. Every render afterwards applies it: the word's own measured track first, then the shared corrections, then the usual bounded profile retune.",
+    "Takes that are clipped, too short, or too noisy are refused with the reason shown, and nothing is fitted from them. Your takes stay on this device, stored with the voice under the same consent record."
+   ]
+  },
+  {
    "version": "v7",
    "date": "2026-10-24",
    "changes": [
@@ -64,5 +74,5 @@
    "version": "v1"
   }
  ],
- "latest": "v7"
+ "latest": "v8"
 }

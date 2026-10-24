@@ -1,8 +1,8 @@
 // Prompt + lyrics -> scene. A readable plan: tempo, key, sections with
 // chord progressions, syllable-timed vocal lines. Deterministic per seed.
 
-import { mulberry32 } from "./audio.js?v=7";
-import { scoreLine } from "./phonemes.js?v=7";
+import { mulberry32 } from "./audio.js?v=8";
+import { scoreLine } from "./phonemes.js?v=8";
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const NOTE_SEMI = { C: 0, "C#": 1, Db: 1, D: 2, "D#": 3, Eb: 3, E: 4, F: 5, "F#": 6, Gb: 6, G: 7, "G#": 8, Ab: 8, A: 9, "A#": 10, Bb: 10, B: 11 };
@@ -141,6 +141,10 @@ export function assignMelody(scene, seed) {
         notes.push({
           section: sec.name, syllable: syl,
           phonemes: scoredOk ? scored[si].phonemes : null,
+          // Word identity (V27): lets the renderer resolve this voice's
+          // word calibration for exactly this chunk of exactly this word.
+          word: scoredOk ? scored[si].word : null,
+          chunkIndex: scoredOk ? scored[si].chunkIndex : null,
           start: sec.startAt + barStart + si * sylDur,
           dur: sylDur * 0.92, midi: Math.round(cur),
         });
