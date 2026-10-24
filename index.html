@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Frozen In Flames: Kindling, Open Music Creation System</title>
 <meta name="description" content="Upload your audio, save reusable voice characters, instruments, and presets, then render songs from them. All in the browser.">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 <header class="hero">
@@ -132,6 +132,10 @@
           <select id="sel-preset"></select>
         </label>
       </div>
+      <label class="field">
+        <span><input type="checkbox" id="chk-whisper"> Whisper (words in noise)</span>
+        <span class="dim">Renders the vocal line as a whisper: the words carried by shaped noise, no pitch. Uncheck for the sung voice retuned to the selected profile.</span>
+      </label>
       <div class="btnrow">
         <button id="render-btn" class="primary">Render song</button>
       </div>
@@ -159,6 +163,6 @@
   <p><a href="https://github.com/Frozen-In-Flames/frozen-in-flames-kindling">Frozen In Flames: Kindling on GitHub</a> (Apache-2.0)</p>
 </footer>
 
-<script type="module" src="js/app.js?v=6"></script>
+<script type="module" src="js/app.js?v=7"></script>
 </body>
 </html>

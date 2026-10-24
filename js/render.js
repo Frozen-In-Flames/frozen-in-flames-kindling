@@ -1,56 +1,225 @@
 // Offline song renderer. Procedural reference synthesis, honest by design:
-// the vocal line is a formant-textured reference voice, not a learned
+// the vocal line is phoneme-driven formant synthesis (V26), not a learned
 // singing model. Same seed renders the same choices. Stems are pre-preset;
 // the mix runs through the preset chain on the mix bus.
 
-import { midiToFreq, mulberry32 } from "./audio.js?v=6";
+import { midiToFreq, mulberry32 } from "./audio.js?v=7";
+import {
+  CONSONANTS, VOWEL_FORMANTS, DIPHTHONG_FORMANTS, isVowel,
+  warpVowelTarget, observedTargetsFromLabels, scoreFragment,
+} from "./phonemes.js?v=7";
 
 const SR = 44100;
 
-const FORMANTS = {
-  AA: [730, 1090], AE: [660, 1720], AH: [520, 1190], AO: [570, 840],
-  EH: [530, 1840], ER: [490, 1350], IH: [390, 1990], IY: [270, 2290],
-  OW: [450, 1030], UH: [440, 1020], UW: [300, 870],
-};
-
-function vowelOf(syllable, observedLabels) {
-  const m = (syllable || "").match(/[aeiouy]/);
-  const natural = m ? ({ a: "AA", e: "EH", i: "IY", o: "OW", u: "UW", y: "IY" }[m[0]] || "AH") : "AH";
-  if (!observedLabels || !observedLabels.length) return natural;
-  const clean = observedLabels.map(l => String(l).replace(/\?$/, ""));
-  if (clean.includes(natural)) return natural;
-  // The synth stays inside vowels actually observed in this voice.
-  return clean[0];
-}
-
-const FRICATIVES = new Set(["s", "f", "h", "z", "v", "x"]);
-const STOPS = new Set(["p", "b", "t", "d", "k", "g"]);
-
 function gauss(x) { return Math.exp(-0.5 * x * x); }
 
-// Direct buffer synthesis of one sung syllable.
-export function synthVowelNote(freq, dur, formantKey, rng, perf = {}) {
+// ---- Vocal line: phoneme-score formant synthesis (V26) ------------------
+// The score comes from phonemes.js: real English phonemes per syllable,
+// fixed before any voice is chosen. Source-filter split (the owner's
+// design): the words are defined by formant targets that MOVE along the
+// phoneme score; the excitation is shaped noise (the whisper substrate,
+// which is also how fricatives physically work) or a harmonic source at
+// the melody pitch (the voiced retune). The voice profile enters only as
+// warpVowelTarget: a bounded pull of targets toward its observed vowel
+// space. It can shape a phoneme's sound; it can never change which
+// phoneme the lyrics asked for. (The pre-V26 synth froze one vowel per
+// syllable and let the profile REPLACE the lyric's vowel. Both are gone.)
+
+function fixedDur(ph) {
+  if (isVowel(ph)) return 0;
+  const c = CONSONANTS[ph];
+  if (!c) return 0.05;
+  if (c.cls === "stop") return c.closure + 0.012 + c.vot;
+  if (c.cls === "affricate") return c.closure + 0.008 + (CONSONANTS[c.fric].dur || 0.1);
+  return c.dur || 0.06;
+}
+
+// Time-proportion a note: onsets and codas take their articulation times
+// (scaled down together if the note is short), the nucleus takes the rest
+// and carries the pitch.
+function buildSegments(phonemes, totalDur) {
+  const nucIdx = phonemes.findIndex(isVowel);
+  let consT = 0;
+  const fixed = phonemes.map((ph, idx) => {
+    if (idx === nucIdx) return 0;
+    const d = fixedDur(ph); consT += d; return d;
+  });
+  const budget = totalDur * 0.5;
+  const scale = consT > budget && consT > 0 ? budget / consT : 1;
+  const nucDur = Math.max(0.04, totalDur - consT * scale);
+  let t = 0;
+  return phonemes.map((ph, idx) => {
+    const dur = idx === nucIdx ? nucDur : fixed[idx] * scale;
+    const seg = { ph, info: CONSONANTS[ph] || null, start: t, dur };
+    t += dur;
+    return seg;
+  });
+}
+
+// Formant keyframes across the note. Diphthongs get two keys (the glide);
+// liquids and glides are warped like vowels; nasals keep their murmur
+// targets; obstruents add no keys, so the track glides between the voiced
+// neighbors around them, as a real vocal tract does.
+function buildFormantTrack(segs, observed) {
+  const keys = [];
+  for (const seg of segs) {
+    if (isVowel(seg.ph)) {
+      if (DIPHTHONG_FORMANTS[seg.ph]) {
+        const [a, b] = DIPHTHONG_FORMANTS[seg.ph];
+        keys.push({ t: seg.start + seg.dur * 0.22, f: warpVowelTarget(a, observed) });
+        keys.push({ t: seg.start + seg.dur * 0.85, f: warpVowelTarget(b, observed) });
+      } else {
+        keys.push({ t: seg.start + seg.dur * 0.5, f: warpVowelTarget(VOWEL_FORMANTS[seg.ph], observed) });
+      }
+    } else if (seg.info && seg.info.formants) {
+      const warpIt = seg.info.cls === "liquid" || seg.info.cls === "glide";
+      keys.push({
+        t: seg.start + seg.dur * 0.5,
+        f: warpIt ? warpVowelTarget(seg.info.formants, observed) : seg.info.formants.slice(),
+      });
+    }
+  }
+  if (!keys.length) keys.push({ t: 0, f: VOWEL_FORMANTS.AH.slice() });
+  keys.sort((a, b) => a.t - b.t);
+  return keys;
+}
+
+function trackAt(keys, t) {
+  if (t <= keys[0].t) return keys[0].f;
+  const last = keys[keys.length - 1];
+  if (t >= last.t) return last.f;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const a = keys[i], b = keys[i + 1];
+    if (t >= a.t && t <= b.t) {
+      let u = (t - a.t) / Math.max(1e-6, b.t - a.t);
+      u = u * u * (3 - 2 * u); // smoothstep: trajectories, not steps
+      return a.f.map((fa, j) => Math.exp(Math.log(fa) + u * (Math.log(b.f[j]) - Math.log(fa))));
+    }
+  }
+  return last.f;
+}
+
+// Raw [voiceWeight, noiseWeight, noiseBand|null] for one segment at local
+// time lt. This is the articulation table: closures are silent (or a low
+// murmur when the stop is voiced), bursts are noise, the VOT gap is quiet,
+// voiced fricatives run both sources at once, and in whisper mode every
+// segment runs on noise alone through the same formant track.
+function segExcitation(seg, lt, whisper) {
+  const c = seg.info;
+  if (isVowel(seg.ph)) return whisper ? [0, 0.85, null] : [1, 0, null];
+  if (!c) return whisper ? [0, 0.5, null] : [0.6, 0, null];
+  switch (c.cls) {
+    case "nasal": return whisper ? [0, 0.55, null] : [c.gain, 0, null];
+    case "liquid":
+    case "glide": return whisper ? [0, 0.7, null] : [c.gain, 0, null];
+    case "fricative": {
+      const band = c.breath ? null : c.band;
+      if (whisper) return [0, Math.max(0.5, c.gain), band];
+      return [c.voiced ? 0.5 : 0, c.gain, band];
+    }
+    case "stop": {
+      if (lt < c.closure) return [(!whisper && c.voiced) ? 0.22 : 0, 0, null];
+      if (lt < c.closure + 0.012) return [0, c.burstGain + 0.25, c.burstBand];
+      return [0, 0, null]; // voice-onset-time gap
+    }
+    case "affricate": {
+      const fc = CONSONANTS[c.fric];
+      if (lt < c.closure) return [(!whisper && c.voiced) ? 0.2 : 0, 0, null];
+      if (lt < c.closure + 0.008) return [0, 0.5, fc.band];
+      if (whisper) return [0, Math.max(0.5, fc.gain), fc.band];
+      return [c.voiced ? 0.45 : 0, fc.gain, fc.band];
+    }
+    default: return [0, 0, null];
+  }
+}
+
+function peaking(freq, q, gainDb) {
+  const A = Math.pow(10, gainDb / 40);
+  const w = (2 * Math.PI * Math.min(freq, SR * 0.45)) / SR;
+  const alpha = Math.sin(w) / (2 * q), cosw = Math.cos(w);
+  const b0 = 1 + alpha * A, b1 = -2 * cosw, b2 = 1 - alpha * A;
+  const a0 = 1 + alpha / A, a1 = -2 * cosw, a2 = 1 - alpha / A;
+  return { b: [b0 / a0, b1 / a0, b2 / a0], a1: a1 / a0, a2: a2 / a0 };
+}
+
+// Direct buffer synthesis of one sung (or whispered) syllable note.
+export function synthVocalNote(note, rng, perf = {}) {
+  const phonemes = (note.phonemes && note.phonemes.length)
+    ? note.phonemes.slice()
+    : scoreFragment(note.syllable).phonemes;
+  const dur = Math.max(0.05, note.dur || 0.3);
   const n = Math.max(16, Math.floor(dur * SR));
   const out = new Float32Array(n);
-  const [F1, F2] = FORMANTS[formantKey] || FORMANTS.AH;
+  const observed = perf.observedTargets || observedTargetsFromLabels(perf.vowelLabels);
+  const segs = buildSegments(phonemes.length ? phonemes : ["AH"], dur);
+  const keys = buildFormantTrack(segs, observed);
+  const whisper = !!perf.whisper;
+  const baseFreq = midiToFreq(note.midi || 69);
   const vibRate = perf.vibratoRateHz ?? 5.5;
-  const vibDepth = perf.vibratoDepthCents != null
-    ? perf.vibratoDepthCents / 100
-    : (0.1 + (perf.belt || 0) * 0.12); // semitones
-  let phase = 0;
+  const vibDepth = whisper ? 0
+    : perf.vibratoDepthCents != null
+      ? perf.vibratoDepthCents / 100
+      : (0.1 + (perf.belt || 0) * 0.12); // semitones
+  let segIdx = 0, phase = 0, voiceW = 0, noiseW = 0, prevRawNoise = 0;
+  const smoothA = 1 - Math.exp(-1 / (SR * 0.003)); // ~3 ms weight smoothing
+  // Two independent state sets: the formant cascade runs twice (see the
+  // noise block), and each pass needs its own biquad history.
+  const fstates = [{ x: [0, 0], y: [0, 0] }, { x: [0, 0], y: [0, 0] }, { x: [0, 0], y: [0, 0] },
+                   { x: [0, 0], y: [0, 0] }, { x: [0, 0], y: [0, 0] }, { x: [0, 0], y: [0, 0] }];
+  let fcoeffs = null, blockLeft = 0;
   for (let i = 0; i < n; i++) {
     const t = i / SR;
-    const vib = vibDepth * Math.sin(2 * Math.PI * vibRate * t);
-    const f = freq * Math.pow(2, vib / 12);
+    while (segIdx < segs.length - 1 && t >= segs[segIdx].start + segs[segIdx].dur) segIdx++;
+    const seg = segs[segIdx];
+    const [tv, tn, band] = segExcitation(seg, t - seg.start, whisper);
+    voiceW += (tv - voiceW) * smoothA;
+    noiseW += (tn - noiseW) * smoothA;
+    const [F1, F2, F3] = trackAt(keys, t);
+    const vibRamp = Math.min(1, Math.max(0, (t - 0.07) / 0.12));
+    const vib = vibDepth * vibRamp * Math.sin(2 * Math.PI * vibRate * t);
+    const f = baseFreq * Math.pow(2, vib / 12);
     phase += (2 * Math.PI * f) / SR;
-    let s = 0, wsum = 0;
-    for (let h = 1; h <= 8; h++) {
-      const fh = f * h;
-      const w = (1 / h) * (1 + 2 * gauss((fh - F1) / (F1 * 0.35)) + 1.4 * gauss((fh - F2) / (F2 * 0.3)));
-      s += Math.sin(phase * h) * w;
-      wsum += w;
+    let voice = 0;
+    if (voiceW > 0.003) {
+      let s = 0, wsum = 0;
+      for (let h = 1; h <= 9; h++) {
+        const fh = f * h;
+        if (fh > SR * 0.48) break;
+        const w = (1 / h) * (1
+          + 2 * gauss((fh - F1) / (F1 * 0.35))
+          + 1.4 * gauss((fh - F2) / (F2 * 0.3))
+          + 0.7 * gauss((fh - F3) / (F3 * 0.22)));
+        s += Math.sin(phase * h) * w;
+        wsum += w;
+      }
+      voice = (s / (wsum || 1)) * 2.2;
     }
-    out[i] = (s / (wsum || 1)) * 2.2;
+    let noise = 0;
+    if (noiseW > 0.003) {
+      if (blockLeft <= 0) {
+        fcoeffs = band
+          ? [peaking(Math.sqrt(band[0] * band[1]), 1.1, 10), peaking(band[0], 2.5, 3), peaking(band[1], 2.5, 3)]
+          : [peaking(F1, 1.3, 11), peaking(F2, 1.6, 9), peaking(F3, 2, 5)];
+        blockLeft = 96;
+      }
+      blockLeft--;
+      let x = rng() * 2 - 1;
+      if (band) { const hp = x - prevRawNoise; prevRawNoise = x; x = hp; } // crude band highpass
+      // Formant-shaped noise runs the cascade twice: one EQ pass leaves
+      // white noise nearly flat between the formants, and a whisper's
+      // identity lives in the valleys as much as the peaks.
+      const passes = band ? 1 : 2;
+      for (let p = 0; p < passes; p++) {
+        for (let k = 0; k < 3; k++) {
+          const cf = fcoeffs[k], st = fstates[p * 3 + k];
+          const y = cf.b[0] * x + cf.b[1] * st.x[0] + cf.b[2] * st.x[1] - cf.a1 * st.y[0] - cf.a2 * st.y[1];
+          st.x[1] = st.x[0]; st.x[0] = x; st.y[1] = st.y[0]; st.y[0] = y;
+          x = y;
+        }
+      }
+      noise = x * 1.1;
+    }
+    out[i] = voiceW * voice + noiseW * noise;
   }
   // Envelope: quick attack, short release.
   const atk = Math.min(n, Math.floor(SR * 0.015));
@@ -67,39 +236,9 @@ export function synthVowelNote(freq, dur, formantKey, rng, perf = {}) {
   return out;
 }
 
-function synthConsonant(prefix, rng) {
-  // Shaped noise burst for fricatives/stops at syllable starts.
-  const ch = (prefix || "").charAt(0);
-  if (FRICATIVES.has(ch)) {
-    const n = Math.floor(SR * 0.06);
-    const out = new Float32Array(n);
-    let prev = 0;
-    for (let i = 0; i < n; i++) {
-      const x = rng() * 2 - 1;
-      const hp = x - prev; // crude highpass
-      prev = x;
-      out[i] = hp * (1 - i / n) * 0.5;
-    }
-    return out;
-  }
-  if (STOPS.has(ch)) {
-    const n = Math.floor(SR * 0.025);
-    const out = new Float32Array(n);
-    for (let i = 0; i < n; i++) out[i] = (rng() * 2 - 1) * Math.exp(-i / (n * 0.25)) * 0.6;
-    return out;
-  }
-  return null;
-}
-
+// Back-compat name: a note is one syllable of the phoneme score now.
 export function synthSyllable(note, rng, perf) {
-  const freq = midiToFreq(note.midi);
-  const vowel = synthVowelNote(freq, note.dur, vowelOf(note.syllable, perf.vowelLabels), rng, perf);
-  const cons = synthConsonant(note.syllable, rng);
-  if (!cons) return vowel;
-  const out = new Float32Array(cons.length + vowel.length);
-  out.set(cons, 0);
-  for (let i = 0; i < vowel.length; i++) out[cons.length + i] += vowel[i] * 0.9;
-  return out;
+  return synthVocalNote(note, rng, perf);
 }
 
 // ---- Drums (direct synthesis) ----
@@ -270,7 +409,7 @@ function fitMelodyToVoice(melody, voice) {
     return { ...n, midi: Math.round(m) };
   });
 }
-function scheduleArrangement(ctx, dest, scene, melody, assets, seed) {
+function scheduleArrangement(ctx, dest, scene, melody, assets, seed, whisper = false) {
   const rng = mulberry32(seed);
   const spb = 60 / scene.bpm; // seconds per beat
   const drumKit = { kick: synthKick(rng), snare: synthSnare(rng), hat: synthHat(rng) };
@@ -309,9 +448,9 @@ function scheduleArrangement(ctx, dest, scene, melody, assets, seed) {
       }
     }
   }
-  // Voice: syllable-timed formant synth, shaped by the selected voice profile:
-  // melody fitted to its range, formants kept inside its observed vowels,
-  // vibrato and belt from its performance defaults.
+  // Voice: phoneme-score formant synth (V26). The melody is fitted to the
+  // profile's range and the formant targets are warped (bounded) toward
+  // its observed vowel space, but the phonemes come from the lyrics alone.
   const v = assets.voice || {};
   const vperf = v.performance || {};
   const perf = {
@@ -319,6 +458,9 @@ function scheduleArrangement(ctx, dest, scene, melody, assets, seed) {
     vibratoRateHz: vperf.vibratoRateHz ?? 5.5,
     vibratoDepthCents: vperf.vibratoDepthCents ?? null,
     vowelLabels: ((v.timbre && v.timbre.vowelStates) || []).map(s => s.label),
+    observedTargets: observedTargetsFromLabels(
+      ((v.timbre && v.timbre.vowelStates) || []).map(s => s.label)),
+    whisper: !!whisper,
   };
   const fitted = fitMelodyToVoice(melody, v);
   for (const note of fitted) {
@@ -327,7 +469,7 @@ function scheduleArrangement(ctx, dest, scene, melody, assets, seed) {
   }
 }
 
-async function renderGroups({ scene, melody, assets, seed, groups, applyChain }) {
+async function renderGroups({ scene, melody, assets, seed, groups, applyChain, whisper = false }) {
   const totalSec = scene.totalSeconds + 1.5;
   const len = Math.ceil(totalSec * SR);
   const ctx = new OfflineAudioContext(2, len, SR);
@@ -342,7 +484,7 @@ async function renderGroups({ scene, melody, assets, seed, groups, applyChain })
   const dest = { voice: gVoice, instruments: gInst, drums: gDrums };
   if (groups.voice || groups.instruments || groups.drums) {
     // Schedule everything, then mute the groups we do not want.
-    scheduleArrangement(ctx, dest, scene, melody, assets, seed);
+    scheduleArrangement(ctx, dest, scene, melody, assets, seed, whisper);
     gVoice.gain.value = groups.voice ? 1 : 0;
     gInst.gain.value = groups.instruments ? 1 : 0;
     gDrums.gain.value = groups.drums ? 1 : 0;
@@ -350,21 +492,22 @@ async function renderGroups({ scene, melody, assets, seed, groups, applyChain })
   return ctx.startRendering();
 }
 
-export async function renderSong({ scene, melody, assets, seed }) {
+export async function renderSong({ scene, melody, assets, seed, whisper = false }) {
   const all = { voice: true, instruments: true, drums: true };
-  const mix = await renderGroups({ scene, melody, assets, seed, groups: all, applyChain: true });
-  const voice = await renderGroups({ scene, melody, assets, seed, groups: { voice: true, instruments: false, drums: false }, applyChain: false });
-  const instruments = await renderGroups({ scene, melody, assets, seed, groups: { voice: false, instruments: true, drums: false }, applyChain: false });
-  const drums = await renderGroups({ scene, melody, assets, seed, groups: { voice: false, instruments: false, drums: true }, applyChain: false });
+  const mix = await renderGroups({ scene, melody, assets, seed, groups: all, applyChain: true, whisper });
+  const voice = await renderGroups({ scene, melody, assets, seed, groups: { voice: true, instruments: false, drums: false }, applyChain: false, whisper });
+  const instruments = await renderGroups({ scene, melody, assets, seed, groups: { voice: false, instruments: true, drums: false }, applyChain: false, whisper });
+  const drums = await renderGroups({ scene, melody, assets, seed, groups: { voice: false, instruments: false, drums: true }, applyChain: false, whisper });
   return {
     mix, stems: { voice, instruments, drums },
     meta: {
       seed,
+      whisperMode: !!whisper,
       presetApplied: !!(assets.preset && assets.preset.chain && assets.preset.chain.length),
       presetConfidence: assets.preset ? assets.preset.confidence : null,
       voiceId: assets.voice ? assets.voice.id : "guide",
       instrumentId: assets.instrument ? assets.instrument.id : "builtin",
-      honesty: "Reference procedural synthesis. The vocal line is a formant-textured reference voice, not a learned singing model. Instruments are samples or procedural tones, not learned instruments.",
+      honesty: "Reference procedural synthesis. Lyrics are converted to English phonemes and sung through moving formant filters: the words are generated in shaped noise first, then retuned to the voice profile (a bounded formant warp, phonemes unchanged), or left as a pure whisper. Not a learned singing model. Instruments are samples or procedural tones, not learned instruments.",
     },
   };
 }
