@@ -133,6 +133,21 @@ export async function getAudio(sha) {
   return getOne(db, "audio", sha);
 }
 
+// Store a mono audio blob in the content-addressed audio store (the same
+// store asset source audio lives in) and return its sha. Used by word
+// calibration (V27) to keep the provenance sample behind a measurement.
+export async function putAudio(audioMono, sampleRate) {
+  const db = await openDb();
+  const sha = await sha256Hex(audioMono);
+  const has = await getOne(db, "audio", sha);
+  if (!has) {
+    await tx(db, ["audio"], "readwrite", t => {
+      t.objectStore("audio").put({ sha, sampleRate, pcm: audioMono });
+    });
+  }
+  return sha;
+}
+
 export async function renameAsset(id, name) {
   const db = await openDb();
   const rec = await getOne(db, "assets", id);

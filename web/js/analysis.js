@@ -4,7 +4,7 @@
 // and a preset proposal with confidence (never the single true chain).
 // Pure functions over Float32Array; no DOM here, so this is unit testable.
 
-import { mixdownMono, freqToMidi } from "./audio.js?v=7";
+import { mixdownMono, freqToMidi } from "./audio.js?v=8";
 
 // ---- FFT (iterative radix-2) ----
 export function fftMag(input) {
@@ -384,6 +384,202 @@ export function proposePreset(analysis, name) {
     },
     confidence: Math.round(Math.min(1, score) * 100) / 100,
     disclaimer: "plausible inference; different chains can produce similar audio",
+  };
+}
+
+// ---- Word calibration sample measurement (V27) ----
+// One take of one word. Segments voiced regions by energy, finds the
+// vowel nucleus (the longest steady voiced segment), and measures its
+// F1/F2/F3 track with the same spectrum machinery as the vowel states.
+// The quality gate lives here: clipped, too short, too noisy, or no
+// steady nucleus -> { ok: false, reason } with plain language, and the
+// caller must refuse to fit anything. Never fit garbage silently.
+
+function medianNum(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+// Formant estimates for one window: energy-weighted centroids of
+// tilt-compensated magnitude within ordered bands. A centroid moves
+// smoothly when a formant target moves (an argmax sticks to whichever
+// harmonic or skirt is loudest), which is what the calibration solver
+// needs: it fits in measured space, sample against reference renders
+// through this same estimator, so the estimator's bias cancels in the
+// ratio instead of corrupting the fit.
+function formantPeaksOf(frame, sampleRate) {
+  const n = frame.length;
+  const win = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / Math.max(1, n - 1));
+    win[i] = frame[i] * w;
+  }
+  const { mag, binHz } = spectrumOf(win, sampleRate);
+  const centroid = (lo, hi) => {
+    let sw = 0, sf = 0;
+    for (let b = 0; b < mag.length; b++) {
+      const f = b * binHz;
+      if (f < lo || f >= hi) continue;
+      const w = mag[b] * Math.pow(f / 400, 0.8); // counter the source tilt
+      sw += w; sf += w * f;
+    }
+    return sw > 1e-9 ? sf / sw : null;
+  };
+  const f1 = centroid(240, 950);
+  if (f1 == null) return null;
+  const f2 = centroid(Math.max(800, f1 * 1.1), 2900);
+  if (f2 == null) return null;
+  const f3 = centroid(Math.max(1500, f2 * 1.02), 3800);
+  return [f1, f2, f3 == null ? 2400 : f3];
+}
+
+export function analyzeWordSample(mono, sampleRate) {
+  const refuse = (reason) => ({ ok: false, reason });
+  const dur = mono.length / sampleRate;
+  if (dur < 0.2) {
+    return refuse("That sample is too short to measure. Give the word a full breath, half a second or so.");
+  }
+  let peak = 0, clipCount = 0;
+  for (let i = 0; i < mono.length; i++) {
+    const a = Math.abs(mono[i]);
+    if (a > peak) peak = a;
+    if (a >= 0.995) clipCount++;
+  }
+  if (peak < 0.02) {
+    return refuse("That sample is nearly silent. Move closer to the microphone and try again.");
+  }
+  if (clipCount / mono.length > 0.005) {
+    return refuse("That take is clipped: the loudest moments hit the ceiling and flattened, so the vowels cannot be measured honestly. Lower the input level or back off the mic and try again.");
+  }
+  const frameLen = Math.min(2048, mono.length);
+  const hop = 512;
+  const frames = [];
+  let peakRms = 0;
+  for (let s = 0; s + frameLen <= mono.length; s += hop) {
+    let sum = 0, zc = 0, prev = mono[s];
+    for (let i = s; i < s + frameLen; i++) {
+      const x = mono[i];
+      sum += x * x;
+      if ((prev < 0 && x >= 0) || (prev >= 0 && x < 0)) zc++;
+      prev = x;
+    }
+    const rms = Math.sqrt(sum / frameLen);
+    frames.push({ start: s, rms, zcr: zc / frameLen });
+    if (rms > peakRms) peakRms = rms;
+  }
+  if (!frames.length) return refuse("That sample is too short to measure.");
+  // Noise bed: measured in the frames OUTSIDE the word's energy extent
+  // (the gaps before and after it). A take that is wall-to-wall voice
+  // shows no bed; then this gate stays silent and the steady-nucleus
+  // check below is the judge. (A percentile of all frames would mistake
+  // the vowel itself for the floor on a well-filled take.)
+  let firstE = -1, lastE = -1;
+  frames.forEach((f, i) => {
+    if (f.rms > 0.08 * peakRms) { if (firstE < 0) firstE = i; lastE = i; }
+  });
+  const outside = frames.filter((_, i) => i < firstE || i > lastE);
+  let floor = 0;
+  if (outside.length >= 3) {
+    floor = medianNum(outside.map(f => f.rms));
+    if (peakRms / Math.max(floor, 1e-6) < 3.5) {
+      return refuse("That take is too noisy or too quiet to find a steady vowel in. A dry, close recording in a quiet room measures best.");
+    }
+  }
+  // The voiced bar references the take's SUSTAINED level (75th
+  // percentile of frame RMS), not the peak: a loud plosive or
+  // fricative transient would otherwise set the bar above the vowel
+  // itself and the nucleus would vanish.
+  const sortedRms = frames.map(f => f.rms).sort((a, b) => a - b);
+  const refLevel = sortedRms[Math.floor(0.75 * (sortedRms.length - 1))] || peakRms;
+  const voicedThresh = Math.max(0.35 * refLevel, 3 * floor);
+  const isVoiced = frames.map(f => f.rms > voicedThresh && f.zcr < 0.30);
+  // Voiced segments: runs of voiced frames, small gaps merged.
+  const segs = [];
+  let cur = null;
+  for (let i = 0; i < frames.length; i++) {
+    if (isVoiced[i]) {
+      if (!cur) cur = { a: i, b: i };
+      else if (i - cur.b <= 3) cur.b = i;
+      else { segs.push(cur); cur = { a: i, b: i }; }
+    }
+  }
+  if (cur) segs.push(cur);
+  const realSegs = segs.filter(s => s.b - s.a + 1 >= 3);
+  const voicedSeconds = realSegs.reduce((t, s) => t + (s.b - s.a + 1), 0) * hop / sampleRate;
+  if (!realSegs.length || voicedSeconds < 0.10) {
+    return refuse("No steady voice was found in that take. Sing or say the word once, clearly, and hold the vowel for a beat.");
+  }
+  // Energy extent of the word (already located for the noise gate).
+  const frameCenter = (i) => (frames[i].start + frameLen / 2) / sampleRate;
+  const wordStart = frameCenter(firstE), wordEnd = frameCenter(lastE);
+  // Nucleus: the longest voiced segment.
+  let nuc = realSegs[0];
+  for (const s of realSegs) if (s.b - s.a > nuc.b - nuc.a) nuc = s;
+  const nucStartS = frames[nuc.a].start, nucEndS = frames[nuc.b].start + frameLen;
+  const nucStart = nucStartS / sampleRate, nucEnd = nucEndS / sampleRate;
+  // Formant track across the nucleus.
+  const track = [];
+  for (let s = nucStartS; s + 2048 <= nucEndS; s += hop) {
+    const f = formantPeaksOf(mono.slice(s, s + 2048), sampleRate);
+    if (f) track.push({ t: (s + 1024) / sampleRate - wordStart, f });
+  }
+  if (track.length < 3) {
+    return refuse("The vowel in that take was too short to measure. Hold the word a little longer.");
+  }
+  // Trim edge windows: they sit on consonant transitions, not the vowel.
+  const trim = Math.floor(track.length * 0.15);
+  const core = track.slice(trim, track.length - trim || undefined);
+  const use = core.length >= 3 ? core : track;
+  const med = [0, 1, 2].map(j => medianNum(use.map(w => w.f[j])));
+  const third = Math.max(1, Math.floor(use.length / 3));
+  const early = [0, 1, 2].map(j => medianNum(use.slice(0, third).map(w => w.f[j])));
+  const late = [0, 1, 2].map(j => medianNum(use.slice(use.length - third).map(w => w.f[j])));
+  const steadyWindows = use.filter(w =>
+    Math.abs(Math.log(w.f[0] / med[0])) < 0.25 && Math.abs(Math.log(w.f[1] / med[1])) < 0.25);
+  const coreDur = steadyWindows.length * hop / sampleRate;
+  const glide = Math.max(
+    Math.abs(Math.log(early[0] / late[0])), Math.abs(Math.log(early[1] / late[1])));
+  if (coreDur < 0.05 && glide <= 0.15) {
+    return refuse("No steady vowel could be measured in that take: the vowel kept moving or broke up. One clean, held take of the word measures best.");
+  }
+  // Pitch of the nucleus (median ACF over its windows): reference
+  // renders for identification and fitting are made at this pitch, so
+  // the estimator sees sample and reference under the same conditions.
+  const f0s = [];
+  for (let s = nucStartS; s + 2048 <= nucEndS; s += hop * 2) {
+    const f0 = pitchACF(mono.slice(s, s + 2048), sampleRate);
+    if (f0) f0s.push(f0);
+  }
+  const f0 = f0s.length ? medianNum(f0s) : null;
+  // Coda: what lands after the nucleus, before the word's energy ends.
+  const segRms = (a, b) => {
+    const x0 = Math.floor(a * sampleRate), x1 = Math.min(mono.length, Math.floor(b * sampleRate));
+    if (x1 - x0 < 16) return 0;
+    let s = 0;
+    for (let i = x0; i < x1; i++) s += mono[i] * mono[i];
+    return Math.sqrt(s / (x1 - x0));
+  };
+  const nucRms = segRms(nucStart, nucEnd);
+  const codaDur = Math.max(0, wordEnd - nucEnd);
+  const codaRatio = nucRms > 0 ? segRms(nucEnd, wordEnd) / nucRms : 0;
+  return {
+    ok: true,
+    duration: dur,
+    wordStart, wordEnd,
+    wordDur: Math.max(0.05, wordEnd - wordStart),
+    voicedSeconds: Math.round(voicedSeconds * 1000) / 1000,
+    nucleus: {
+      start: nucStart, end: nucEnd, dur: nucEnd - nucStart,
+      track, median: med, early, late,
+      glide: Math.round(glide * 1000) / 1000,
+      steady: coreDur >= 0.05,
+      f0: f0 ? Math.round(f0 * 10) / 10 : null,
+    },
+    onsetDur: Math.max(0, nucStart - wordStart),
+    codaDur, codaRatio: Math.round(codaRatio * 1000) / 1000,
+    codaPresent: codaDur > 0.025 && codaRatio > 0.04,
   };
 }
 
