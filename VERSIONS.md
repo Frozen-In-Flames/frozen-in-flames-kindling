@@ -34,3 +34,22 @@ Each version implements one part of the build manual (`docs/BUILD_MANUAL.md`), i
   `analyze_reference`; honest SDR/SIR eval on synthetic mixtures
   (vocal +18.7 dB SDR, +23.6 dB SIR). `docs/vocal-separation.md`.
   voice_aries v1 deliberately unchanged.
+- **V26** (web app v7): Words you can hear. The owner's design, in his
+  framing: the words are generated first in shaped noise, then retuned to
+  the voice profile, so the text keeps a base of real English and the
+  biometric adaptation is a layer on top, never a substitute. New phoneme
+  layer (`web/js/phonemes.js`): rule-based grapheme-to-phoneme with a
+  130-entry exception dictionary, 39-phoneme inventory, letter-span
+  alignment with the existing syllable timing. The renderer
+  (`web/js/render.js`) is now a formant-track synth: onsets, nucleus, and
+  codas time-proportioned per note, F1/F2/F3 gliding between phoneme
+  targets, per-phoneme excitation (harmonic source, band-shaped noise, or
+  both). The profile retune is a bounded warp (at most 25% of the
+  log-space distance toward the profile's nearest observed vowel,
+  formants clamped to 180-3800 Hz); the pre-V26 behavior, where the
+  profile replaced the lyric's vowel outright, is removed and pinned by a
+  regression test. Whisper mode renders the whole line on noise excitation
+  alone. Web DSP suite: `tests-web/v26.test.mjs`, 80/80. Python engine
+  untouched (238/238); its parity port of the phoneme layer is a
+  documented follow-up. Measured outcomes and honest limits:
+  `RELEASE-NOTES-V26.md`.

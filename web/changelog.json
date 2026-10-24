@@ -1,1 +1,68 @@
-{"entries": [{"version": "v6", "date": "2026-10-18", "changes": ["Compose is now a DAW-style timeline: Voice, Instruments, and Drums tracks with labeled section regions (verse, chorus, ...) sized by bar length, plus a sweeping playhead.", "Transport bar: play, stop, elapsed/total time, and tempo readout.", "Live mixer: per-track volume, mute, and solo (solo overrides mute), plus master volume. Playback runs the rendered stems through the mixer so every move acts in real time.", "Session setup (prompt, lyrics, asset picks, render) now lives in a collapsible panel. Upload, Library, Updates, downloads, and the seeded Frozen In Flames voice are untouched."]}, {"changes": ["Lyrics recovery: lyric-like words typed in the Prompt field now sing even when the Lyrics box is empty (production directives like bpm and section names are stripped out).", "Pure-directive prompts still render an instrumental, no phantom vocals.", "Cache-busted assets (?v=5) so phones stop running stale cached code."], "date": "2026-10-17", "version": "v5"}, {"changes": ["The voice profile now shapes the vocal synth for real: melody fitted into the voice's range, formants kept inside its observed vowels, vibrato and belt from its performance defaults.", "The voice dropdown defaults to the Frozen In Flames voice.", "Clear warning when no lyrics means an instrumental render."], "date": "2026-10-17", "version": "v4"}, {"changes": ["The Frozen In Flames voice ships as the default character for every user: the demo sings with nothing uploaded.", "Your own uploads sit alongside it; switching is the voice dropdown. Seeding never touches existing records."], "date": "2026-10-17", "version": "v3"}, {"changes": ["Cross-platform saving: native share sheet on iPhone (Save to Files), normal downloads on Android and desktop.", "Full audit: pure standard web tech, no platform-specific code."], "date": "2026-10-17", "version": "v2"}, {"changes": ["First release: upload audio, real in-browser analysis (pitch, vowel states, tempo, tonal balance, dynamics).", "IndexedDB library for voice characters, instruments, and presets.", "Compose from prompt plus lyrics, offline render, WAV mix and stems download. Everything on-device, nothing uploaded."], "date": "2026-10-17", "version": "v1"}], "latest": "v6"}
+{
+ "entries": [
+  {
+   "version": "v7",
+   "date": "2026-10-24",
+   "changes": [
+    "The voice can sing words now: lyrics are converted to real English phonemes (onsets, vowel, ending consonants) and rendered through formant filters that move along the word, instead of one frozen vowel sound per syllable.",
+    "New Whisper setting in Session setup: the same words rendered in shaped noise with no pitch, the raw layer the sung voice is built from.",
+    "Voice profiles retune the sound within strict limits (formants pulled at most a quarter of the way toward the profile's vowels). A profile can no longer replace a word's vowel with a different one.",
+    "Consonants are articulated: hissing s and sh, stop bursts with real voice-onset timing (ba vs pa), nasal hum, and ending consonants that actually land (the t at the end of heart)."
+   ]
+  },
+  {
+   "version": "v6",
+   "date": "2026-10-18",
+   "changes": [
+    "Compose is now a DAW-style timeline: Voice, Instruments, and Drums tracks with labeled section regions (verse, chorus, ...) sized by bar length, plus a sweeping playhead.",
+    "Transport bar: play, stop, elapsed/total time, and tempo readout.",
+    "Live mixer: per-track volume, mute, and solo (solo overrides mute), plus master volume. Playback runs the rendered stems through the mixer so every move acts in real time.",
+    "Session setup (prompt, lyrics, asset picks, render) now lives in a collapsible panel. Upload, Library, Updates, downloads, and the seeded Frozen In Flames voice are untouched."
+   ]
+  },
+  {
+   "changes": [
+    "Lyrics recovery: lyric-like words typed in the Prompt field now sing even when the Lyrics box is empty (production directives like bpm and section names are stripped out).",
+    "Pure-directive prompts still render an instrumental, no phantom vocals.",
+    "Cache-busted assets (?v=5) so phones stop running stale cached code."
+   ],
+   "date": "2026-10-17",
+   "version": "v5"
+  },
+  {
+   "changes": [
+    "The voice profile now shapes the vocal synth for real: melody fitted into the voice's range, formants kept inside its observed vowels, vibrato and belt from its performance defaults.",
+    "The voice dropdown defaults to the Frozen In Flames voice.",
+    "Clear warning when no lyrics means an instrumental render."
+   ],
+   "date": "2026-10-17",
+   "version": "v4"
+  },
+  {
+   "changes": [
+    "The Frozen In Flames voice ships as the default character for every user: the demo sings with nothing uploaded.",
+    "Your own uploads sit alongside it; switching is the voice dropdown. Seeding never touches existing records."
+   ],
+   "date": "2026-10-17",
+   "version": "v3"
+  },
+  {
+   "changes": [
+    "Cross-platform saving: native share sheet on iPhone (Save to Files), normal downloads on Android and desktop.",
+    "Full audit: pure standard web tech, no platform-specific code."
+   ],
+   "date": "2026-10-17",
+   "version": "v2"
+  },
+  {
+   "changes": [
+    "First release: upload audio, real in-browser analysis (pitch, vowel states, tempo, tonal balance, dynamics).",
+    "IndexedDB library for voice characters, instruments, and presets.",
+    "Compose from prompt plus lyrics, offline render, WAV mix and stems download. Everything on-device, nothing uploaded."
+   ],
+   "date": "2026-10-17",
+   "version": "v1"
+  }
+ ],
+ "latest": "v7"
+}
