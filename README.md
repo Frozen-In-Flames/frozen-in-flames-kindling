@@ -3,6 +3,10 @@
 
 Kindling is an open, professional-grade system that generates, edits, and re-renders complete songs from a persistent scene, reusable creative assets, and an explainable artist profile.
 
+## Live demonstration
+
+- [Kindling](https://frozen-in-flames.github.io/frozen-in-flames-kindling/): the system's web implementation, running in the browser.
+
 The name says what it is. Reusable voice characters, virtual instruments, and production presets are the kindling: the prepared fuel you lay down before every song. The musical scene is how you lay the fire. Rendering is the burn. And any song can be rekindled, changed exactly where you want, and burned again.
 
 ### What it is
