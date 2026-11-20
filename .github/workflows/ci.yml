@@ -25,6 +25,11 @@ jobs:
           python-version: "3.12"
       - name: Install package with dev extras
         run: pip install -e ".[dev]"
+      # kindling/assets/separate.py imports scipy, but pyproject.toml
+      # does not declare it. Until the package metadata is corrected,
+      # CI installs it explicitly so the suite can collect.
+      - name: Install scipy (imported by kindling.assets, undeclared in pyproject)
+        run: pip install scipy
       - name: Python suite (tests/, configured in pyproject.toml)
         run: python -m pytest
 
