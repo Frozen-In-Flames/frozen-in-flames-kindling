@@ -1,0 +1,41 @@
+# Proposed for Frozen-In-Flames/frozen-in-flames-kindling at .github/workflows/ci.yml
+# Python job grounded in pyproject.toml and README.md:
+#   pyproject [project.optional-dependencies] dev = pytest>=8.0
+#   pyproject [tool.pytest.ini_options] testpaths = ["tests"], pythonpath = ["."]
+#   pyproject dependencies = numpy, pyyaml, jsonschema (installed by pip install -e .)
+#   README: install with "pip install -e ."
+# Web job grounded in the test files themselves:
+#   tests-web/v26.test.mjs header: "Run: node tests-web/v26.test.mjs (exit 0 = all pass)"
+#   tests-web/v27.test.mjs is the same standalone pattern (exit code reports pass/fail).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package with dev extras
+        run: pip install -e ".[dev]"
+      - name: Python suite (tests/, configured in pyproject.toml)
+        run: python -m pytest
+
+  web-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Web DSP suite V26
+        run: node tests-web/v26.test.mjs
+      - name: Web calibration suite V27
+        run: node tests-web/v27.test.mjs
