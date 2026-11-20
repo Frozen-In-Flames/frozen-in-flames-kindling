@@ -47,6 +47,10 @@ Live-performance accompaniment. Every language on day one. Mobile-native inferen
 
 One version per part of the build manual. V1 is Part 1, Product definition (this document). V2 is Part 2, Architecture, and so on through V23, the release checklist. See [VERSIONS.md](VERSIONS.md). Nothing is skipped.
 
+Quality thresholds in targets.yaml are not yet set. They are owner-set
+values, recorded as TBD, and the build rule is that no training run
+begins until every threshold carries a number.
+
 ### Spec
 
 The full build manual is the spec: [docs/BUILD_MANUAL.md](docs/BUILD_MANUAL.md). Every part has Purpose, Requirements (MUST / SHOULD / MAY), and Acceptance tests. Part 22 gives the build sequence with exit criteria. Part 23 is the release checklist.

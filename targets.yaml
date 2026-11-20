@@ -2,6 +2,10 @@
 # Rule: set a numeric threshold for every row before training anything.
 # Publish them. Review them quarterly.
 # Run tools/check_targets.py to report which thresholds are still unset.
+# Status: all thresholds below are unset (TBD) as of November 2026.
+# Per the rule above, no training run begins until the owner has set a
+# numeric threshold for every row. tools/check_targets.py reports the
+# current state: 8 of 8 thresholds unset.
 
 version: "1.0"
 status: draft
